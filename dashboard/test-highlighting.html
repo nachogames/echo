@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Highlighting</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        .test-case {
+            margin: 20px 0;
+            padding: 15px;
+            border: 1px solid #ddd;
+            background: #f5f5f5;
+        }
+        .test-case h3 {
+            margin: 0 0 10px 0;
+        }
+        .test-data {
+            background: white;
+            padding: 10px;
+            border: 1px solid #ccc;
+            font-family: monospace;
+            white-space: pre-wrap;
+        }
+    </style>
+</head>
+<body>
+    <h1>Echo Dashboard Highlighting Test Cases</h1>
+    
+    <div class="test-case">
+        <h3>1. URL with UUID (should highlight both)</h3>
+        <div class="test-data">https://api.dev-5-2772-1.24g.lxp.live/training-guide/66b61d8d-ed59-4d2c-87c4-bd2811fdc445</div>
+    </div>
+    
+    <div class="test-case">
+        <h3>2. Domain without protocol (should highlight)</h3>
+        <div class="test-data">api.dev-5-2772-1.24g.lxp.live</div>
+    </div>
+    
+    <div class="test-case">
+        <h3>3. HTTP Header (should NOT highlight)</h3>
+        <div class="test-data">access-control-allow-credentials</div>
+    </div>
+    
+    <div class="test-case">
+        <h3>4. API Key</h3>
+        <div class="test-data">sk_test_4eC39HqLyjWDarjtT1zdp7dc</div>
+    </div>
+    
+    <div class="test-case">
+        <h3>5. JWT Token</h3>
+        <div class="test-data">eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c</div>
+    </div>
+    
+    <div class="test-case">
+        <h3>6. Mixed Content in cURL</h3>
+        <div class="test-data">curl -X GET https://api.dev-5-2772-1.24g.lxp.live/training-guide/66b61d8d-ed59-4d2c-87c4-bd2811fdc445 \
+  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c" \
+  -H "Host: api.dev-5-2772-1.24g.lxp.live"</div>
+    </div>
+    
+    <script>
+        // Test data object to simulate dashboard data
+        const testData = {
+            request: {
+                url: "https://api.dev-5-2772-1.24g.lxp.live/training-guide/66b61d8d-ed59-4d2c-87c4-bd2811fdc445",
+                method: "GET",
+                headers: [
+                    { name: "authorization", value: "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c" },
+                    { name: "access-control-allow-credentials", value: "true" },
+                    { name: "host", value: "api.dev-5-2772-1.24g.lxp.live" }
+                ]
+            },
+            response: {
+                status: 200,
+                headers: [],
+                body: JSON.stringify({ id: "66b61d8d-ed59-4d2c-87c4-bd2811fdc445", apiKey: "sk_test_4eC39HqLyjWDarjtT1zdp7dc" })
+            },
+            curl: 'curl -X GET "https://api.dev-5-2772-1.24g.lxp.live/training-guide/66b61d8d-ed59-4d2c-87c4-bd2811fdc445" -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c"'
+        };
+        
+        // Encode to Base64 and create test URL
+        const base64Data = btoa(unescape(encodeURIComponent(JSON.stringify(testData))));
+        const testUrl = `http://localhost:8082/index.html?data=${base64Data}`;
+        
+        document.body.innerHTML += `
+            <div style="margin-top: 30px; padding: 20px; background: #e3f2fd; border: 2px solid #2196f3;">
+                <h2>Test the Dashboard</h2>
+                <p>Click the link below to test the highlighting in the actual dashboard:</p>
+                <a href="${testUrl}" target="_blank" style="font-size: 18px;">Open Echo Dashboard with Test Data</a>
+            </div>
+        `;
+    </script>
+</body>
+</html>

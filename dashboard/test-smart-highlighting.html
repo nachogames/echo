@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Smart Highlighting</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .test-section {
+            background: white;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h2 {
+            color: #333;
+            margin-bottom: 15px;
+        }
+        .test-data {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 4px;
+            font-family: monospace;
+            white-space: pre-wrap;
+            word-break: break-all;
+        }
+        .legend {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-top: 20px;
+        }
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        .color-sample {
+            width: 20px;
+            height: 20px;
+            border-radius: 3px;
+            border: 1px solid #ddd;
+        }
+    </style>
+</head>
+<body>
+    <h1>Smart Highlighting Test Data</h1>
+    
+    <div class="test-section">
+        <h2>Color Legend</h2>
+        <div class="legend">
+            <div class="legend-item">
+                <div class="color-sample" style="background: #fffbdd;"></div>
+                <span>UUID</span>
+            </div>
+            <div class="legend-item">
+                <div class="color-sample" style="background: #e3f2fd;"></div>
+                <span>JWT</span>
+            </div>
+            <div class="legend-item">
+                <div class="color-sample" style="background: #e8f5e9;"></div>
+                <span>Email</span>
+            </div>
+            <div class="legend-item">
+                <div class="color-sample" style="background: #f5f5f5;"></div>
+                <span>URL</span>
+            </div>
+            <div class="legend-item">
+                <div class="color-sample" style="background: #f3e5f5;"></div>
+                <span>ISO Date</span>
+            </div>
+            <div class="legend-item">
+                <div class="color-sample" style="background: #fff3e0;"></div>
+                <span>API Key</span>
+            </div>
+            <div class="legend-item">
+                <div class="color-sample" style="background: #fce4ec;"></div>
+                <span>Base64</span>
+            </div>
+            <div class="legend-item">
+                <div class="color-sample" style="background: #efebe9;"></div>
+                <span>ObjectId</span>
+            </div>
+            <div class="legend-item">
+                <div class="color-sample" style="background: #e0f2f1;"></div>
+                <span>Bearer Token</span>
+            </div>
+        </div>
+    </div>
+    
+    <div class="test-section">
+        <h2>Test Request Data (Base64 Encoded)</h2>
+        <p>Use this data to test the Echo Dashboard highlighting:</p>
+        <div class="test-data" id="test-data"></div>
+        <button onclick="copyTestData()" style="margin-top: 10px;">Copy Base64 Data</button>
+    </div>
+    
+    <script>
+        // Sample request data with various smart content types
+        const testData = {
+            request: {
+                url: "https://api.example.com/users/550e8400-e29b-41d4-a716-446655440000/profile",
+                method: "POST",
+                headers: [
+                    { name: "Authorization", value: "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c" },
+                    { name: "X-API-Key", value: "sk_test_4eC39HqLyjWDarjtT1zdp7dc" },
+                    { name: "Content-Type", value: "application/json" }
+                ]
+            },
+            payload: JSON.stringify({
+                userId: "550e8400-e29b-41d4-a716-446655440000",
+                email: "john.doe@example.com",
+                profilePicture: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==",
+                createdAt: "2024-01-15T09:30:00.000Z",
+                webhookUrl: "https://webhook.site/123e4567-e89b-12d3-a456-426614174000",
+                mongoId: "507f1f77bcf86cd799439011"
+            }, null, 2),
+            response: {
+                status: 200,
+                headers: [
+                    { name: "Content-Type", value: "application/json" },
+                    { name: "X-Request-ID", value: "req_7b9d8e6f-5c4a-3b2a-1a0z-9x8y7w6v5u4t" }
+                ],
+                body: JSON.stringify({
+                    success: true,
+                    data: {
+                        id: "550e8400-e29b-41d4-a716-446655440000",
+                        email: "john.doe@example.com",
+                        token: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI1NTBlODQwMC1lMjliLTQxZDQtYTcxNi00NDY2NTU0NDAwMDAiLCJpYXQiOjE1MTYyMzkwMjJ9.4Adcj3UFYzPUVaVF43FmMab6RlaQD8A9V8wFzzht-KQ",
+                        lastModified: "2024-01-15T14:45:30.123Z",
+                        apiEndpoint: "https://api.example.com/v2/users/550e8400-e29b-41d4-a716-446655440000",
+                        sessionId: "sess_AbCdEfGhIjKlMnOpQrStUvWxYz1234567890"
+                    }
+                }, null, 2)
+            },
+            curl: `curl -X POST 'https://api.example.com/users/550e8400-e29b-41d4-a716-446655440000/profile' \\
+  -H 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c' \\
+  -H 'X-API-Key: sk_test_4eC39HqLyjWDarjtT1zdp7dc' \\
+  -H 'Content-Type: application/json' \\
+  -d '{"userId":"550e8400-e29b-41d4-a716-446655440000","email":"john.doe@example.com"}'`
+        };
+        
+        // Convert to Base64
+        const jsonString = JSON.stringify(testData);
+        const base64Data = btoa(unescape(encodeURIComponent(jsonString)));
+        
+        document.getElementById('test-data').textContent = base64Data;
+        
+        function copyTestData() {
+            navigator.clipboard.writeText(base64Data).then(() => {
+                alert('Test data copied! Now open index.html and paste it in the manual input field.');
+            });
+        }
+    </script>
+</body>
+</html>

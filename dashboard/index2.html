@@ -1,0 +1,1187 @@
+<html lang="en"><head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Echo Dashboard - Network Request Inspector</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f5f7fa;
+            color: #333;
+            line-height: 1.6;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        .header {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        
+        .header h1 {
+            font-size: 24px;
+            color: #2c3e50;
+            margin-bottom: 10px;
+        }
+        
+        .header p {
+            color: #7f8c8d;
+            font-size: 14px;
+        }
+        
+        .actions {
+            display: flex;
+            gap: 10px;
+            margin: 20px 0;
+        }
+        
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .btn-primary {
+            background: #007bff;
+            color: white;
+        }
+        
+        .btn-primary:hover {
+            background: #0056b3;
+        }
+        
+        .btn-secondary {
+            background: #6c757d;
+            color: white;
+        }
+        
+        .btn-secondary:hover {
+            background: #545b62;
+        }
+        
+        .btn-postman {
+            background: #ff6c37;
+            color: white;
+        }
+        
+        .btn-postman:hover {
+            background: #e55525;
+        }
+        
+        .card {
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+            overflow: hidden;
+        }
+        
+        .card-header {
+            background: #f8f9fa;
+            padding: 15px 20px;
+            border-bottom: 1px solid #dee2e6;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            cursor: pointer;
+        }
+        
+        .card-header h2 {
+            font-size: 16px;
+            color: #495057;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .card-header .chevron {
+            transition: transform 0.3s ease;
+        }
+        
+        .card-header.collapsed .chevron {
+            transform: rotate(-90deg);
+        }
+        
+        .card-body {
+            padding: 20px;
+        }
+        
+        .card-body.collapsed {
+            display: none;
+        }
+        
+        .copy-btn {
+            padding: 4px 12px;
+            font-size: 12px;
+            background: #e9ecef;
+            border: 1px solid #ced4da;
+            border-radius: 4px;
+            color: #495057;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        
+        .copy-btn:hover {
+            background: #dee2e6;
+        }
+        
+        .copy-btn.copied {
+            background: #28a745;
+            color: white;
+            border-color: #28a745;
+        }
+        
+        pre {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            padding: 15px;
+            overflow-x: auto;
+            font-size: 13px;
+            line-height: 1.5;
+            font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+            white-space: pre;
+            word-wrap: normal;
+            margin: 0;
+        }
+        
+        .json-viewer {
+            font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+            font-size: 13px;
+            line-height: 1.5;
+        }
+        
+        .json-key {
+            color: #0451a5;
+        }
+        
+        .json-string {
+            color: #a31515;
+        }
+        
+        .json-number {
+            color: #098658;
+        }
+        
+        .json-boolean {
+            color: #0000ff;
+        }
+        
+        .json-null {
+            color: #808080;
+        }
+        
+        .json-toggle {
+            cursor: pointer;
+            user-select: none;
+            display: inline-block;
+            width: 16px;
+            font-size: 12px;
+            color: #666;
+            font-family: monospace;
+            text-align: center;
+            border-radius: 2px;
+            margin-right: 2px;
+            transition: all 0.2s ease;
+        }
+        
+        .json-toggle:hover {
+            color: #000;
+            background: #e0e0e0;
+            transform: scale(1.1);
+        }
+        
+        .json-expandable {
+            cursor: pointer;
+        }
+        
+        .json-collapsed {
+            display: none;
+        }
+        
+        .json-preview {
+            color: #999;
+            font-style: italic;
+            margin-left: 5px;
+            font-size: 12px;
+        }
+        
+        .json-viewer {
+            background: #f5f7fa;
+            border: 1px solid #e1e8ed;
+            border-radius: 4px;
+            padding: 12px;
+            font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+            font-size: 13px;
+            line-height: 1.6;
+            overflow-x: auto;
+            white-space: pre;
+            word-wrap: normal;
+        }
+        
+        #response-body .json-viewer {
+            margin: 0;
+            background: transparent;
+            border: none;
+            padding: 0;
+        }
+        
+        #payload-content .json-viewer {
+            margin: 0;
+            background: transparent;
+            border: none;
+            padding: 0;
+        }
+        
+        .smart-copy {
+            cursor: pointer;
+            text-decoration: underline;
+            text-decoration-style: dotted;
+            text-decoration-color: #999;
+            position: relative;
+            padding: 2px 4px;
+            border-radius: 3px;
+            transition: all 0.2s ease;
+        }
+        
+        .smart-copy:hover {
+            background: #fffbdd;
+            text-decoration-color: #333;
+        }
+        
+        /* Nested smart-copy for UUIDs within URLs */
+        .smart-copy .smart-copy {
+            background: rgba(255, 235, 100, 0.2);
+            border: 1px dashed #f0d000;
+            padding: 1px 3px;
+            margin: 0 2px;
+        }
+        
+        .smart-copy .smart-copy:hover {
+            background: #fff59d;
+            border-color: #f9a825;
+        }
+        
+        /* Toast notifications */
+        .toast-container {
+            position: fixed;
+            bottom: 20px;
+            left: 20px;
+            z-index: 9999;
+            display: flex;
+            flex-direction: column-reverse;
+            gap: 10px;
+        }
+        
+        .toast {
+            background: #333;
+            color: white;
+            padding: 14px 20px;
+            border-radius: 8px;
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.2);
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            animation: popIn 0.2s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            transform-origin: bottom left;
+        }
+        
+        .toast:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+        }
+        
+        .toast.success {
+            background: linear-gradient(135deg, #28a745 0%, #20c447 100%);
+        }
+        
+        .toast.info {
+            background: linear-gradient(135deg, #007bff 0%, #0056b3 100%);
+        }
+        
+        .toast.error {
+            background: linear-gradient(135deg, #dc3545 0%, #c82333 100%);
+        }
+        
+        .toast-icon {
+            font-size: 20px;
+            animation: iconBounce 0.4s ease-out 0.1s;
+        }
+        
+        .toast.hiding {
+            animation: popOut 0.15s ease-in;
+            opacity: 0;
+            transform: scale(0.8) translateY(10px);
+        }
+        
+        @keyframes popIn {
+            0% {
+                transform: scale(0.6) translateY(20px);
+                opacity: 0;
+            }
+            50% {
+                transform: scale(1.05) translateY(-2px);
+            }
+            100% {
+                transform: scale(1) translateY(0);
+                opacity: 1;
+            }
+        }
+        
+        @keyframes popOut {
+            from {
+                transform: scale(1) translateY(0);
+                opacity: 1;
+            }
+            to {
+                transform: scale(0.8) translateY(10px);
+                opacity: 0;
+            }
+        }
+        
+        @keyframes iconBounce {
+            0%, 100% {
+                transform: scale(1);
+            }
+            50% {
+                transform: scale(1.2);
+            }
+        }
+        
+        .method-badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 3px;
+            font-size: 12px;
+            font-weight: bold;
+            margin-left: 10px;
+        }
+        
+        .method-get { background: #61affe; color: white; }
+        .method-post { background: #49cc90; color: white; }
+        .method-put { background: #fca130; color: white; }
+        .method-delete { background: #f93e3e; color: white; }
+        .method-patch { background: #50e3c2; color: white; }
+        
+        .status-badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 3px;
+            font-size: 12px;
+            font-weight: bold;
+            margin-left: 10px;
+        }
+        
+        .status-2xx { background: #49cc90; color: white; }
+        .status-3xx { background: #fca130; color: white; }
+        .status-4xx { background: #f93e3e; color: white; }
+        .status-5xx { background: #d32f2f; color: white; }
+        
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: #6c757d;
+        }
+        
+        .empty-state h2 {
+            font-size: 20px;
+            margin-bottom: 10px;
+        }
+        
+        .empty-state p {
+            font-size: 14px;
+        }
+        
+        .manual-input {
+            margin-top: 30px;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 8px;
+        }
+        
+        .manual-input textarea {
+            width: 100%;
+            min-height: 100px;
+            padding: 10px;
+            border: 1px solid #ced4da;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 12px;
+            resize: vertical;
+        }
+        
+        .manual-input button {
+            margin-top: 10px;
+        }
+        
+        .headers-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        
+        .headers-table th,
+        .headers-table td {
+            padding: 8px 12px;
+            text-align: left;
+            border-bottom: 1px solid #dee2e6;
+        }
+        
+        .headers-table th {
+            background: #f8f9fa;
+            font-weight: 600;
+            color: #495057;
+        }
+        
+        .headers-table tr:last-child td {
+            border-bottom: none;
+        }
+        
+        .url-display {
+            background: #f8f9fa;
+            padding: 10px;
+            border-radius: 4px;
+            word-break: break-all;
+            font-family: monospace;
+            font-size: 13px;
+        }
+    </style>
+</head>
+<body>
+    <div class="toast-container" id="toast-container"></div>
+    <div class="container">
+        <div class="header">
+            <h1>Echo Dashboard</h1>
+            <p>Network Request Inspector - Debug and share HTTP requests with ease</p>
+        </div>
+        
+        <div class="actions">
+            <button class="btn btn-postman" id="run-postman-btn">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M13.527.099C6.955-.744.942 3.9.099 10.473c-.843 6.572 3.8 12.584 10.373 13.428 6.573.843 12.584-3.801 13.428-10.374C24.744 6.955 20.101.943 13.527.099zm2.471 7.485a.855.855 0 0 0-.593.25l-4.453 4.453-.307-.307-.643-.643c4.389-4.376 5.18-4.418 5.996-3.753zm-4.863 4.861l4.44-4.44a.62.62 0 1 1 .847.903l-4.699 4.125-.588-.588zm.33.694l-1.1.238a.06.06 0 0 1-.067-.032.06.06 0 0 1 .01-.073l.645-.645.512.512zm-2.803-.459l1.172-1.172.879.878-1.979.426a.074.074 0 0 1-.085-.039.072.072 0 0 1 .013-.093zm-3.646 6.058a.076.076 0 0 1-.069-.083.077.077 0 0 1 .022-.046h.002l.946-.946 1.222 1.222-2.123-.147zm2.425-1.256a.228.228 0 0 0-.117.256l.203.865a.125.125 0 0 1-.211.117h-.003l-.934-.934-.294-.295 3.762-3.758 1.82-.393.874.874c-1.255 1.102-2.971 2.201-5.1 3.268zm5.279-3.428h-.002l-.839-.839 4.699-4.125a.952.952 0 0 0 .119-.127c-.148 1.345-2.029 3.245-3.977 5.091zm3.657-6.46l-.003-.002a1.822 1.822 0 0 1 2.459-2.684l-1.61 1.613a.119.119 0 0 0 0 .169l1.247 1.247a1.817 1.817 0 0 1-2.093-.343zm2.578 0a1.714 1.714 0 0 1-.271.218h-.001l-1.207-1.207 1.533-1.533c.661.72.637 1.832-.054 2.522z"></path>
+                </svg>
+                Run in Postman
+            </button>
+        </div>
+        
+        <div id="content">
+            <div class="empty-state" id="empty-state" style="display: none;">
+                <h2>No Request Data Available</h2>
+                <p>Open this dashboard from the Echo Chrome extension or paste request data below.</p>
+                
+                <div class="manual-input">
+                    <textarea id="manual-input" placeholder="Paste your Base64-encoded request data here..."></textarea>
+                    <button class="btn btn-primary" id="load-data-btn">Load Data</button>
+                </div>
+            </div>
+            
+            <div id="request-details" style="display: block;">
+                <!-- Request Card -->
+                <div class="card">
+                    <div class="card-header" onclick="toggleCard(this)">
+                        <h2>
+                            <span class="chevron">▼</span>
+                            Request
+                            <span class="method-badge method-post" id="request-method">POST</span>
+                        </h2>
+                        <button class="copy-btn" onclick="copySection('request'); event.stopPropagation();">Copy</button>
+                    </div>
+                    <div class="card-body">
+                        <div class="url-display" id="request-url"></div>
+                        <h3 style="margin-top: 20px; margin-bottom: 10px; font-size: 14px;">Headers</h3>
+                        <table class="headers-table" id="request-headers">
+                            <thead>
+                                <tr>
+                                    <th style="width: 30%;">Name</th>
+                                    <th>Value</th>
+                                </tr>
+                            </thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </div>
+                
+                <!-- Payload Card -->
+                <div class="card" id="payload-card" style="display: none;">
+                    <div class="card-header" onclick="toggleCard(this)">
+                        <h2>
+                            <span class="chevron">▼</span>
+                            Payload
+                        </h2>
+                        <button class="copy-btn" onclick="copySection('payload'); event.stopPropagation();">Copy</button>
+                    </div>
+                    <div class="card-body">
+                        <pre id="payload-content"></pre>
+                    </div>
+                </div>
+                
+                <!-- Response Card -->
+                <div class="card">
+                    <div class="card-header" onclick="toggleCard(this)">
+                        <h2>
+                            <span class="chevron">▼</span>
+                            Response
+                            <span class="status-badge status-2xx" id="response-status">200</span>
+                        </h2>
+                        <button class="copy-btn" onclick="copySection('response'); event.stopPropagation();">Copy</button>
+                    </div>
+                    <div class="card-body">
+                        <h3 style="margin-bottom: 10px; font-size: 14px;">Headers</h3>
+                        <table class="headers-table" id="response-headers">
+                            <thead>
+                                <tr>
+                                    <th style="width: 30%;">Name</th>
+                                    <th>Value</th>
+                                </tr>
+                            </thead>
+                            <tbody></tbody>
+                        </table>
+                        <h3 style="margin-top: 20px; margin-bottom: 10px; font-size: 14px;">Body</h3>
+                        <pre id="response-body"></pre>
+                    </div>
+                </div>
+                
+                <!-- cURL Card -->
+                <div class="card">
+                    <div class="card-header" onclick="toggleCard(this)">
+                        <h2>
+                            <span class="chevron">▼</span>
+                            cURL Command
+                        </h2>
+                        <button class="copy-btn" onclick="copySection('curl'); event.stopPropagation();">Copy</button>
+                    </div>
+                    <div class="card-body">
+                        <pre id="curl-command"></pre>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        let currentRequestData = null;
+        
+        // Decompress gzipped data
+        async function decompressString(compressedData) {
+            const stream = new DecompressionStream('gzip');
+            const writer = stream.writable.getWriter();
+            const reader = stream.readable.getReader();
+            
+            writer.write(compressedData);
+            writer.close();
+            
+            const chunks = [];
+            let done = false;
+            while (!done) {
+                const { value, done: streamDone } = await reader.read();
+                done = streamDone;
+                if (value) chunks.push(value);
+            }
+            
+            const totalLength = chunks.reduce((sum, chunk) => sum + chunk.length, 0);
+            const result = new Uint8Array(totalLength);
+            let offset = 0;
+            for (const chunk of chunks) {
+                result.set(chunk, offset);
+                offset += chunk.length;
+            }
+            
+            return new TextDecoder().decode(result);
+        }
+
+        // Parse and display request data
+        async function parseAndDisplayData(base64Data) {
+            try {
+                // Handle URL encoding issues
+                base64Data = base64Data.replace(/ /g, '+');
+                
+                // Try to decompress first (new format), fall back to old format
+                let jsonString;
+                try {
+                    // New compressed format
+                    const binaryString = atob(base64Data);
+                    const compressedData = new Uint8Array(binaryString.length);
+                    for (let i = 0; i < binaryString.length; i++) {
+                        compressedData[i] = binaryString.charCodeAt(i);
+                    }
+                    jsonString = await decompressString(compressedData);
+                } catch {
+                    // Fall back to old uncompressed format
+                    jsonString = decodeURIComponent(escape(atob(base64Data)));
+                }
+                
+                const data = JSON.parse(jsonString);
+                
+                currentRequestData = data;
+                displayRequestData(data);
+                
+                // Hide empty state, show request details
+                document.getElementById('empty-state').style.display = 'none';
+                document.getElementById('request-details').style.display = 'block';
+            } catch (error) {
+                console.error('Error parsing data:', error);
+                console.error('Base64 data length:', base64Data.length);
+                console.error('Base64 data (first 100 chars):', base64Data.substring(0, 100));
+                console.error('JSON string length:', jsonString?.length || 'undefined');
+                if (jsonString) {
+                    console.error('JSON string ends with:', jsonString.slice(-200));
+                }
+                alert('Error parsing request data. The data may be too long or corrupted. Try using a shorter request.');
+            }
+        }
+        
+        // Display request data in the UI
+        function displayRequestData(data) {
+            // Request details
+            const method = data.request.method;
+            document.getElementById('request-method').textContent = method;
+            document.getElementById('request-method').className = `method-badge method-${method.toLowerCase()}`;
+            document.getElementById('request-url').textContent = data.request.url;
+            
+            // Request headers
+            const requestHeadersBody = document.querySelector('#request-headers tbody');
+            requestHeadersBody.innerHTML = '';
+            if (data.request.headers && data.request.headers.length > 0) {
+                data.request.headers.forEach(header => {
+                    const row = requestHeadersBody.insertRow();
+                    row.insertCell(0).textContent = header.name || header.key;
+                    row.insertCell(1).textContent = header.value;
+                });
+            }
+            
+            // Payload
+            if (data.payload) {
+                document.getElementById('payload-card').style.display = 'block';
+                const payloadContent = document.getElementById('payload-content');
+                
+                console.log('Payload data:', data.payload);
+                console.log('Payload type:', typeof data.payload);
+                
+                // Try to parse and format JSON
+                try {
+                    const parsedPayload = JSON.parse(data.payload);
+                    console.log('Successfully parsed payload JSON:', parsedPayload);
+                    payloadContent.innerHTML = '<div class="json-viewer">' + syntaxHighlightJSON(parsedPayload) + '</div>';
+                    
+                    // Process smart content in payload
+                    setTimeout(() => {
+                        processSmartContentInElement(payloadContent);
+                    }, 50);
+                } catch (error) {
+                    console.error('Payload JSON parse error:', error);
+                    console.log('Falling back to raw payload text');
+                    payloadContent.textContent = data.payload;
+                }
+            } else {
+                document.getElementById('payload-card').style.display = 'none';
+            }
+            
+            // Response status
+            const status = data.response.status;
+            const statusBadge = document.getElementById('response-status');
+            statusBadge.textContent = status;
+            statusBadge.className = `status-badge status-${Math.floor(status/100)}xx`;
+            
+            // Response headers
+            const responseHeadersBody = document.querySelector('#response-headers tbody');
+            responseHeadersBody.innerHTML = '';
+            if (data.response.headers && data.response.headers.length > 0) {
+                data.response.headers.forEach(header => {
+                    const row = responseHeadersBody.insertRow();
+                    row.insertCell(0).textContent = header.name || header.key;
+                    row.insertCell(1).textContent = header.value;
+                });
+            }
+            
+            // Response body
+            const responseBody = document.getElementById('response-body');
+            if (data.response.body) {
+                console.log('Response body data:', data.response.body);
+                console.log('Response body type:', typeof data.response.body);
+                console.log('Response body length:', data.response.body.length);
+                try {
+                    const parsedBody = JSON.parse(data.response.body);
+                    console.log('Successfully parsed JSON:', parsedBody);
+                    const highlighted = syntaxHighlightJSON(parsedBody);
+                    console.log('Highlighted JSON length:', highlighted.length);
+                    responseBody.innerHTML = '<div class="json-viewer">' + highlighted + '</div>';
+                    
+                    // Process smart content in the response body after a short delay
+                    setTimeout(() => {
+                        processSmartContentInElement(responseBody);
+                    }, 50);
+                } catch (error) {
+                    console.error('JSON parse error:', error);
+                    console.log('Falling back to raw text');
+                    
+                    // Check if this looks like truncated JSON
+                    const isTruncated = data.response.body.length >= 5000 && 
+                                      (data.response.body.endsWith('"') === false || 
+                                       error.message.includes('Unterminated'));
+                    
+                    if (isTruncated) {
+                        responseBody.innerHTML = `
+                            <div style="background: #fff3cd; border: 1px solid #ffeaa7; padding: 10px; border-radius: 4px; margin-bottom: 10px;">
+                                <strong>⚠️ Warning:</strong> Response appears to be truncated at ${data.response.body.length} characters. 
+                                The complete JSON structure cannot be displayed.
+                            </div>
+                            <pre style="white-space: pre-wrap; word-wrap: break-word;">${data.response.body}</pre>
+                        `;
+                    } else {
+                        responseBody.textContent = data.response.body;
+                    }
+                }
+            } else {
+                responseBody.textContent = 'No response body';
+            }
+            
+            // cURL command with smart highlighting
+            const curlElement = document.getElementById('curl-command');
+            curlElement.innerHTML = processCurlForSmartCopy(data.curl);
+            
+            // Process all content for smart copy detection
+            setTimeout(processAllSmartContent, 100);
+        }
+        
+        // Syntax highlight JSON with interactive expand/collapse
+        function syntaxHighlightJSON(obj, expanded = true) {
+            const uid = 'json_' + Math.random().toString(36).substr(2, 9);
+            
+            function createInteractiveJSON(data, depth = 0, forceExpanded = null) {
+                if (data === null) return '<span class="json-null">null</span>';
+                if (typeof data === 'boolean') return '<span class="json-boolean">' + data + '</span>';
+                if (typeof data === 'number') return '<span class="json-number">' + data + '</span>';
+                if (typeof data === 'string') {
+                    // Escape HTML entities to prevent rendering
+                    const escaped = data
+                        .replace(/&/g, '&amp;')
+                        .replace(/</g, '&lt;')
+                        .replace(/>/g, '&gt;')
+                        .replace(/"/g, '&quot;')
+                        .replace(/'/g, '&#39;');
+                    return '<span class="json-string">"' + escaped + '"</span>';
+                }
+                
+                const isArray = Array.isArray(data);
+                const keys = Object.keys(data);
+                const isEmpty = keys.length === 0;
+                
+                if (isEmpty) {
+                    return isArray ? '[]' : '{}';
+                }
+                
+                const id = uid + '_' + depth + '_' + Math.random().toString(36).substr(2, 5);
+                const preview = isArray ? `[...${keys.length} items]` : `{...${keys.length} keys}`;
+                
+                // Decide if this should be collapsed
+                // Everything expanded by default, arrays show first 2 items expanded
+                let shouldCollapse;
+                if (forceExpanded === true) {
+                    shouldCollapse = false;
+                } else if (forceExpanded === false) {
+                    shouldCollapse = true;
+                } else {
+                    // Expand everything by default
+                    shouldCollapse = false;
+                }
+                
+                let html = '<span class="json-toggle" onclick="toggleJSON(\'' + id + '\')" id="toggle_' + id + '">' + (shouldCollapse ? '▶' : '▼') + '</span>';
+                html += isArray ? '[' : '{';
+                html += '<span class="json-preview" id="preview_' + id + '" style="display: ' + (shouldCollapse ? 'inline' : 'none') + ';">' + preview + '</span>';
+                html += '<span id="' + id + '" style="display: ' + (shouldCollapse ? 'none' : 'inline') + ';">';
+                
+                keys.forEach((key, index) => {
+                    if (index > 0) html += ',';
+                    html += '\n' + '  '.repeat(depth + 1);
+                    
+                    if (!isArray) {
+                        const escapedKey = key
+                            .replace(/&/g, '&amp;')
+                            .replace(/</g, '&lt;')
+                            .replace(/>/g, '&gt;')
+                            .replace(/"/g, '&quot;')
+                            .replace(/'/g, '&#39;');
+                        html += '<span class="json-key">"' + escapedKey + '"</span>: ';
+                    }
+                    
+                    // For arrays, only expand first 2 items by default
+                    let childForceExpanded = forceExpanded;
+                    if (isArray && forceExpanded === null) {
+                        childForceExpanded = index < 2 ? null : false;
+                    }
+                    
+                    html += createInteractiveJSON(data[key], depth + 1, childForceExpanded);
+                });
+                
+                html += '\n' + '  '.repeat(depth) + '</span>';
+                html += isArray ? ']' : '}';
+                
+                return html;
+            }
+            
+            return createInteractiveJSON(obj);
+        }
+        
+        // Toggle JSON section
+        window.toggleJSON = function(id) {
+            const element = document.getElementById(id);
+            const toggle = document.getElementById('toggle_' + id);
+            const preview = document.getElementById('preview_' + id);
+            
+            if (element.style.display === 'none') {
+                element.style.display = 'inline';
+                preview.style.display = 'none';
+                toggle.textContent = '▼';
+            } else {
+                element.style.display = 'none';
+                preview.style.display = 'inline';
+                toggle.textContent = '▶';
+            }
+        }
+        
+        // Toggle card collapse
+        function toggleCard(header) {
+            header.classList.toggle('collapsed');
+            header.nextElementSibling.classList.toggle('collapsed');
+        }
+        
+        // Copy section content
+        function copySection(section) {
+            let textToCopy = '';
+            
+            switch(section) {
+                case 'request':
+                    textToCopy = JSON.stringify({
+                        url: currentRequestData.request.url,
+                        method: currentRequestData.request.method,
+                        headers: currentRequestData.request.headers
+                    }, null, 2);
+                    break;
+                case 'payload':
+                    textToCopy = currentRequestData.payload;
+                    break;
+                case 'response':
+                    textToCopy = JSON.stringify(currentRequestData.response, null, 2);
+                    break;
+                case 'curl':
+                    textToCopy = currentRequestData.curl;
+                    break;
+            }
+            
+            navigator.clipboard.writeText(textToCopy).then(() => {
+                showToast(`${section.charAt(0).toUpperCase() + section.slice(1)} copied to clipboard!`, 'success');
+            }).catch(err => {
+                showToast('Failed to copy to clipboard', 'error');
+                console.error('Copy failed:', err);
+            });
+        }
+        
+        // Pattern detection for smart copy
+        function detectSmartContent(text) {
+            // UUID pattern
+            if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(text)) {
+                return { type: 'UUID', value: text };
+            }
+            // JWT pattern (more flexible)
+            if (/^[A-Za-z0-9-_]+\.[A-Za-z0-9-_]+\.?[A-Za-z0-9-_]*$/.test(text) && text.split('.').length >= 2) {
+                return { type: 'JWT', value: text };
+            }
+            // Bearer token
+            if (/^Bearer\s+[A-Za-z0-9-_]+\.?[A-Za-z0-9-_]*\.?[A-Za-z0-9-_]*$/i.test(text)) {
+                return { type: 'Bearer Token', value: text };
+            }
+            // API Key patterns (common formats)
+            if (/^[A-Za-z0-9]{32,}$/.test(text) && text.length >= 32 && text.length <= 64) {
+                return { type: 'API Key', value: text };
+            }
+            // Email
+            if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(text)) {
+                return { type: 'Email', value: text };
+            }
+            // URL
+            if (/^https?:\/\/.+/.test(text)) {
+                return { type: 'URL', value: text };
+            }
+            // Base64 (more flexible)
+            if (/^[A-Za-z0-9+/]+=*$/.test(text) && text.length > 20) {
+                return { type: 'Base64', value: text };
+            }
+            // ISO Date
+            if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{3})?Z?$/.test(text)) {
+                return { type: 'ISO Date', value: text };
+            }
+            // MongoDB ObjectId
+            if (/^[0-9a-f]{24}$/i.test(text)) {
+                return { type: 'ObjectId', value: text };
+            }
+            return null;
+        }
+        
+        // Process string content for smart patterns (used in JSON strings)
+        function processStringForSmartContent(text) {
+            // Escape HTML first
+            let processed = text
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;');
+            
+            // Match URLs (including those with UUIDs)
+            processed = processed.replace(
+                /https?:\/\/[^\s'"]+/g,
+                (match) => {
+                    // Check if the URL contains a UUID
+                    const uuidPattern = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi;
+                    let urlWithHighlightedUuid = match;
+                    
+                    // Replace UUIDs within the URL with highlighted versions
+                    urlWithHighlightedUuid = urlWithHighlightedUuid.replace(
+                        uuidPattern,
+                        (uuid) => `<span class="smart-copy" data-copy="${uuid}" data-type="UUID" title="Click to copy UUID">${uuid}</span>`
+                    );
+                    
+                    // Wrap the entire URL
+                    return `<span class="smart-copy" data-copy="${match}" data-type="URL" title="Click to copy URL">${urlWithHighlightedUuid}</span>`;
+                }
+            );
+            
+            // Match standalone UUIDs (not already in URLs)
+            processed = processed.replace(
+                /\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/gi,
+                (match) => {
+                    // Check if already wrapped
+                    if (!processed.includes(`data-copy="${match}"`)) {
+                        return `<span class="smart-copy" data-copy="${match}" data-type="UUID" title="Click to copy UUID">${match}</span>`;
+                    }
+                    return match;
+                }
+            );
+            
+            return processed;
+        }
+        
+        // Process cURL command for smart copy
+        function processCurlForSmartCopy(curlCommand) {
+            // Escape HTML first
+            let processed = curlCommand
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;');
+            
+            // Match URLs (including those with UUIDs)
+            processed = processed.replace(
+                /https?:\/\/[^\s'"]+/g,
+                (match) => {
+                    // Check if the URL contains a UUID
+                    const uuidPattern = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi;
+                    let urlWithHighlightedUuid = match;
+                    
+                    // Replace UUIDs within the URL with highlighted versions
+                    urlWithHighlightedUuid = urlWithHighlightedUuid.replace(
+                        uuidPattern,
+                        (uuid) => `<span class="smart-copy" data-copy="${uuid}" data-type="UUID" title="Click to copy UUID">${uuid}</span>`
+                    );
+                    
+                    // Wrap the entire URL
+                    return `<span class="smart-copy" data-copy="${match}" data-type="URL" title="Click to copy URL">${urlWithHighlightedUuid}</span>`;
+                }
+            );
+            
+            // Match standalone UUIDs (not already in URLs)
+            processed = processed.replace(
+                /\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/gi,
+                (match) => {
+                    // Check if already wrapped
+                    if (!processed.includes(`data-copy="${match}"`)) {
+                        return `<span class="smart-copy" data-copy="${match}" data-type="UUID" title="Click to copy UUID">${match}</span>`;
+                    }
+                    return match;
+                }
+            );
+            
+            // Match Bearer tokens
+            processed = processed.replace(
+                /Bearer\s+[A-Za-z0-9-_]+\.?[A-Za-z0-9-_]*\.?[A-Za-z0-9-_]*/g,
+                (match) => `<span class="smart-copy" data-copy="${match}" data-type="Bearer Token" title="Click to copy Bearer Token">${match}</span>`
+            );
+            
+            // Match JWT tokens in authorization headers
+            processed = processed.replace(
+                /authorization:\s*([A-Za-z0-9-_]+\.[A-Za-z0-9-_]+\.?[A-Za-z0-9-_]*)/gi,
+                (match, token) => {
+                    return match.replace(token, `<span class="smart-copy" data-copy="${token}" data-type="JWT" title="Click to copy JWT">${token}</span>`);
+                }
+            );
+            
+            // Match API keys (common patterns in headers)
+            processed = processed.replace(
+                /(?:api[_-]?key|x-api-key|apikey):\s*([A-Za-z0-9]{20,})/gi,
+                (match, key) => {
+                    return match.replace(key, `<span class="smart-copy" data-copy="${key}" data-type="API Key" title="Click to copy API Key">${key}</span>`);
+                }
+            );
+            
+            return processed;
+        }
+        
+        // Process smart content in an element
+        function processSmartContentInElement(element) {
+            // Process all JSON elements for smart highlighting
+            element.querySelectorAll('.json-string').forEach(elem => {
+                const text = elem.textContent.replace(/^"|"$/g, '');
+                
+                // Check if the entire string is a detectable pattern
+                const detected = detectSmartContent(text);
+                if (detected) {
+                    elem.classList.add('smart-copy');
+                    elem.dataset.copy = detected.value;
+                    elem.dataset.type = detected.type;
+                    elem.title = `Click to copy ${detected.type}`;
+                } else {
+                    // Check for patterns within the string (like URLs with UUIDs)
+                    const processedHtml = processStringForSmartContent(text);
+                    if (processedHtml !== text) {
+                        // Remove quotes and re-add them around the processed content
+                        elem.innerHTML = '"' + processedHtml + '"';
+                    }
+                }
+            });
+            
+            // Process JSON keys and numbers
+            element.querySelectorAll('.json-key, .json-number').forEach(elem => {
+                const text = elem.textContent.replace(/^"|"$/g, '');
+                const detected = detectSmartContent(text);
+                if (detected) {
+                    elem.classList.add('smart-copy');
+                    elem.dataset.copy = detected.value;
+                    elem.dataset.type = detected.type;
+                    elem.title = `Click to copy ${detected.type}`;
+                }
+            });
+        }
+        
+        // Process all table cells and pre content
+        function processAllSmartContent() {
+            // Process table cells
+            document.querySelectorAll('td').forEach(td => {
+                const text = td.textContent.trim();
+                const detected = detectSmartContent(text);
+                if (detected) {
+                    td.classList.add('smart-copy');
+                    td.dataset.copy = detected.value;
+                    td.dataset.type = detected.type;
+                    td.title = `Click to copy ${detected.type}`;
+                }
+            });
+            
+            // Process all URL displays
+            document.querySelectorAll('.url-display').forEach(elem => {
+                const text = elem.textContent.trim();
+                if (text) {
+                    elem.innerHTML = processCurlForSmartCopy(text);
+                }
+            });
+        }
+        
+        // Toast notification system
+        function showToast(message, type = 'success', duration = 3000) {
+            const toastContainer = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            toast.className = `toast ${type}`;
+            
+            const icons = {
+                success: '✓',
+                info: 'ℹ',
+                error: '✗'
+            };
+            
+            toast.innerHTML = `
+                <span class="toast-icon">${icons[type] || icons.success}</span>
+                <span>${message}</span>
+            `;
+            
+            toastContainer.appendChild(toast);
+            
+            setTimeout(() => {
+                toast.classList.add('hiding');
+                setTimeout(() => toast.remove(), 300);
+            }, duration);
+        }
+        
+        // Add click handler for smart copy with toast
+        document.addEventListener('click', (e) => {
+            if (e.target.classList.contains('smart-copy')) {
+                e.stopPropagation(); // Prevent bubbling for nested elements
+                const textToCopy = e.target.dataset.copy;
+                const type = e.target.dataset.type || 'content';
+                
+                navigator.clipboard.writeText(textToCopy).then(() => {
+                    showToast(`${type} copied to clipboard!`, 'success');
+                }).catch(err => {
+                    showToast('Failed to copy to clipboard', 'error');
+                    console.error('Copy failed:', err);
+                });
+            }
+        });
+        
+        // Handle manual data input
+        document.getElementById('load-data-btn').addEventListener('click', async () => {
+            const input = document.getElementById('manual-input').value.trim();
+            if (input) {
+                await parseAndDisplayData(input);
+            }
+        });
+        
+        // Check for data parameter on load
+        window.addEventListener('DOMContentLoaded', async () => {
+            const urlParams = new URLSearchParams(window.location.search);
+            const base64Data = urlParams.get('data');
+            const requestId = urlParams.get('id');
+            
+            if (requestId && typeof chrome !== 'undefined' && chrome.storage) {
+                // New method: Get data from Chrome storage (only works when served via extension)
+                try {
+                    const result = await chrome.storage.local.get([`dashboard_${requestId}`]);
+                    const data = result[`dashboard_${requestId}`];
+                    if (data) {
+                        currentRequestData = data;
+                        displayRequestData(data);
+                        document.getElementById('empty-state').style.display = 'none';
+                        document.getElementById('request-details').style.display = 'block';
+                        
+                        // Clean up after use
+                        chrome.storage.local.remove([`dashboard_${requestId}`]);
+                    } else {
+                        console.log('Request data not found in storage, falling back to manual input');
+                        document.getElementById('manual-input').placeholder = 'Request data not found. Please paste the Base64 data here...';
+                    }
+                } catch (error) {
+                    console.error('Error loading from Chrome storage:', error);
+                    console.log('Chrome storage not available, please use Base64 input method');
+                }
+            } else if (base64Data) {
+                // Fallback: Old method with base64 in URL
+                await parseAndDisplayData(base64Data);
+            }
+        });
+    </script>
+</body>
+</html> 

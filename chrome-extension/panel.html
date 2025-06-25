@@ -1,0 +1,769 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Echo Network Panel</title>
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+        
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            font-size: 11px;
+            background: #1e1e1e;
+            color: #cccccc;
+            overflow: hidden;
+        }
+        
+        #container {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+        }
+        
+        #header {
+            background: #252526;
+            border-bottom: 1px solid #3e3e42;
+            padding: 4px 8px;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            flex-wrap: wrap;
+            min-height: 32px;
+        }
+        
+        .toolbar-section {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+        
+        .divider {
+            width: 1px;
+            height: 16px;
+            background: #3e3e42;
+            margin: 0 4px;
+        }
+        
+        .btn {
+            padding: 2px 8px;
+            background: #0e639c;
+            border: none;
+            border-radius: 2px;
+            color: white;
+            cursor: pointer;
+            font-size: 11px;
+            height: 22px;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+        
+        .btn:hover {
+            background: #1177bb;
+        }
+        
+        .btn:active {
+            background: #0d5a8f;
+        }
+        
+        .btn.danger {
+            background: #a1260d;
+        }
+        
+        .btn.danger:hover {
+            background: #be3319;
+        }
+        
+        #filter-input {
+            flex: 1;
+            min-width: 200px;
+            padding: 2px 8px;
+            background: #3c3c3c;
+            border: 1px solid #3e3e42;
+            border-radius: 2px;
+            color: #cccccc;
+            font-size: 11px;
+            height: 22px;
+        }
+        
+        #filter-input:focus {
+            outline: none;
+            border-color: #0e639c;
+        }
+        
+        .filter-type {
+            padding: 2px 8px;
+            background: transparent;
+            border: 1px solid #3e3e42;
+            border-radius: 2px;
+            color: #cccccc;
+            cursor: pointer;
+            font-size: 11px;
+            height: 22px;
+            transition: all 0.1s;
+        }
+        
+        .filter-type:hover {
+            background: #2a2d2e;
+        }
+        
+        .filter-type.active {
+            background: #094771;
+            border-color: #0e639c;
+            color: white;
+        }
+        
+        .domain-tags {
+            display: flex;
+            gap: 4px;
+            flex-wrap: wrap;
+            margin-left: 8px;
+        }
+        
+        .domain-tag {
+            padding: 1px 6px;
+            background: #2a2d2e;
+            border: 1px solid #3e3e42;
+            border-radius: 10px;
+            font-size: 10px;
+            cursor: pointer;
+            transition: all 0.1s;
+        }
+        
+        .domain-tag:hover {
+            background: #094771;
+            border-color: #0e639c;
+            color: white;
+        }
+        
+        .domain-tag.active {
+            background: #0e639c;
+            border-color: #0e639c;
+            color: white;
+        }
+        
+        .request-count {
+            color: #969696;
+            font-size: 11px;
+            margin-left: auto;
+            padding: 0 8px;
+        }
+        
+        #main-content {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+        }
+        
+        #requests-list {
+            flex: 1;
+            overflow-y: auto;
+            background: #1e1e1e;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .requests-header {
+            display: flex;
+            align-items: center;
+            padding: 4px 8px;
+            background: #2d2d30;
+            border-bottom: 1px solid #3e3e42;
+            font-size: 10px;
+            font-weight: bold;
+            color: #cccccc;
+            position: sticky;
+            top: 0;
+            z-index: 1;
+            height: 24px;
+        }
+        
+        .requests-header .status-code {
+            width: 36px;
+            text-align: center;
+            margin-right: 8px;
+        }
+        
+        .requests-header .method {
+            width: 48px;
+            margin-right: 8px;
+        }
+        
+        .requests-header .url {
+            flex: 1;
+        }
+        
+        .requests-header .duration {
+            width: 50px;
+            text-align: right;
+            margin-left: 8px;
+        }
+        
+        .requests-body {
+            flex: 1;
+            overflow-y: auto;
+        }
+        
+        #details-panel {
+            width: 400px;
+            background: #252526;
+            border-left: 1px solid #3e3e42;
+            display: none;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        
+        #details-panel.visible {
+            display: flex;
+        }
+        
+        .details-header {
+            padding: 8px;
+            background: #2d2d30;
+            border-bottom: 1px solid #3e3e42;
+            font-weight: bold;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .details-tabs {
+            display: flex;
+            background: #2d2d30;
+            border-bottom: 1px solid #3e3e42;
+        }
+        
+        .tab {
+            padding: 6px 12px;
+            cursor: pointer;
+            border-bottom: 2px solid transparent;
+            transition: all 0.1s;
+        }
+        
+        .tab:hover {
+            background: #3e3e42;
+        }
+        
+        .tab.active {
+            border-bottom-color: #0e639c;
+            color: white;
+        }
+        
+        .details-content {
+            flex: 1;
+            overflow-y: auto;
+            padding: 8px;
+        }
+        
+        .request-item {
+            display: flex;
+            align-items: center;
+            padding: 2px 8px;
+            border-bottom: 1px solid #2d2d30;
+            cursor: pointer;
+            user-select: none;
+            position: relative;
+            height: 24px;
+        }
+        
+        .request-item:hover {
+            background-color: #2a2d2e;
+        }
+        
+        /* Only enable transitions when data is stable */
+        .requests-body:not(.loading) .request-item {
+            transition: background-color 0.1s ease;
+        }
+        
+        .request-item.selected {
+            background: #094771;
+        }
+        
+        .request-item.failed {
+            color: #f48771;
+        }
+        
+        .request-item.slow::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 0;
+            bottom: 0;
+            width: 3px;
+            background: #ffa500;
+        }
+        
+        .status-code {
+            width: 36px;
+            text-align: center;
+            font-family: 'SF Mono', Monaco, monospace;
+            font-size: 10px;
+            font-weight: bold;
+            margin-right: 8px;
+        }
+        
+        .status-2xx { color: #4ec9b0; }
+        .status-3xx { color: #dcdcaa; }
+        .status-4xx { color: #f48771; }
+        .status-5xx { color: #d16969; }
+        
+        .method {
+            width: 48px;
+            font-family: 'SF Mono', Monaco, monospace;
+            font-size: 10px;
+            font-weight: bold;
+            margin-right: 8px;
+        }
+        
+        .method-GET { color: #569cd6; }
+        .method-POST { color: #4ec9b0; }
+        .method-PUT { color: #dcdcaa; }
+        .method-DELETE { color: #f44747; }
+        .method-PATCH { color: #c586c0; }
+        .method-OPTIONS { color: #9cdcfe; }
+        
+        .url {
+            flex: 1;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            font-family: 'SF Mono', Monaco, monospace;
+            font-size: 10px;
+        }
+        
+        .time {
+            color: #858585;
+            margin-left: 8px;
+            font-size: 10px;
+            width: 50px;
+        }
+        
+        .duration {
+            color: #858585;
+            margin-left: 8px;
+            font-size: 10px;
+            width: 50px;
+            text-align: right;
+            font-family: 'SF Mono', Monaco, monospace;
+        }
+        
+        .size {
+            color: #858585;
+            margin-left: 8px;
+            font-size: 10px;
+            width: 50px;
+            text-align: right;
+            font-family: 'SF Mono', Monaco, monospace;
+        }
+        
+        #empty-state {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            color: #858585;
+            font-size: 12px;
+            text-align: center;
+            padding: 20px;
+        }
+        
+        .close-details {
+            background: transparent;
+            border: none;
+            color: #cccccc;
+            cursor: pointer;
+            padding: 4px;
+            font-size: 14px;
+        }
+        
+        .close-details:hover {
+            color: white;
+        }
+        
+        pre {
+            margin: 0;
+            font-family: 'SF Mono', Monaco, monospace;
+            font-size: 11px;
+            line-height: 1.4;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            position: relative;
+        }
+        
+        .json-viewer {
+            background: #1e1e1e;
+            border: 1px solid #3e3e42;
+            border-radius: 4px;
+            padding: 12px;
+            position: relative;
+            margin: 8px 0;
+        }
+        
+        .json-key { 
+            color: #9cdcfe; 
+            cursor: pointer;
+        }
+        
+        .json-key:hover {
+            text-decoration: underline;
+        }
+        
+        .json-string { 
+            color: #ce9178;
+            cursor: pointer;
+        }
+        
+        .json-string:hover {
+            background: rgba(206, 145, 120, 0.1);
+            border-radius: 2px;
+        }
+        
+        .json-number { 
+            color: #b5cea8;
+            cursor: pointer;
+        }
+        
+        .json-number:hover {
+            background: rgba(181, 206, 168, 0.1);
+            border-radius: 2px;
+        }
+        
+        .json-boolean { 
+            color: #569cd6;
+            cursor: pointer;
+        }
+        
+        .json-boolean:hover {
+            background: rgba(86, 156, 214, 0.1);
+            border-radius: 2px;
+        }
+        
+        .json-null { 
+            color: #569cd6;
+            cursor: pointer;
+        }
+        
+        .copy-json-btn {
+            position: absolute;
+            top: 12px;
+            right: 12px;
+            padding: 6px 10px;
+            background: #0e639c;
+            border: none;
+            border-radius: 2px;
+            color: white;
+            cursor: pointer;
+            font-size: 10px;
+            opacity: 0.7;
+            transition: opacity 0.2s;
+            z-index: 10;
+            line-height: 1;
+            min-width: 40px;
+            text-align: center;
+        }
+        
+        .copy-json-btn:hover {
+            opacity: 1;
+        }
+        
+        .copy-json-btn.copied {
+            background: #4ec9b0;
+        }
+        
+        .value-copied {
+            position: fixed;
+            background: #4ec9b0;
+            color: white;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            pointer-events: none;
+            z-index: 1000;
+            animation: fadeOut 1s ease-in-out;
+        }
+        
+        @keyframes fadeOut {
+            0% { opacity: 1; transform: translateY(0); }
+            100% { opacity: 0; transform: translateY(-10px); }
+        }
+        
+        .headers-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-family: 'SF Mono', Monaco, monospace;
+            font-size: 11px;
+            table-layout: fixed;
+        }
+        
+        .headers-table th {
+            text-align: left;
+            padding: 4px 8px;
+            background: #2d2d30;
+            border-bottom: 1px solid #3e3e42;
+            font-weight: normal;
+            color: #969696;
+        }
+        
+        .headers-table td {
+            padding: 4px 8px;
+            border-bottom: 1px solid #2d2d30;
+            word-break: break-word;
+            max-width: 0;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        
+        .headers-table td:first-child {
+            width: 30%;
+            font-weight: bold;
+            color: #9cdcfe;
+        }
+        
+        .headers-table td:last-child {
+            width: 70%;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            cursor: pointer;
+            transition: background 0.1s ease;
+        }
+        
+        .headers-table td:last-child:hover {
+            background: #2d2d30;
+        }
+        
+        h3 {
+            color: #cccccc;
+            font-size: 12px;
+            margin: 16px 0 8px 0;
+            font-weight: 600;
+        }
+        
+        .headers-table tr:last-child td {
+            border-bottom: none;
+        }
+        
+        ::-webkit-scrollbar {
+            width: 10px;
+            height: 10px;
+        }
+        
+        ::-webkit-scrollbar-track {
+            background: #1e1e1e;
+        }
+        
+        ::-webkit-scrollbar-thumb {
+            background: #424242;
+            border-radius: 5px;
+        }
+        
+        ::-webkit-scrollbar-thumb:hover {
+            background: #4e4e4e;
+        }
+        
+        /* Toast notifications */
+        .toast-container {
+            position: fixed;
+            bottom: 20px;
+            left: 20px;
+            z-index: 9999;
+            display: flex;
+            flex-direction: column-reverse;
+            gap: 10px;
+        }
+        
+        .toast {
+            background: linear-gradient(135deg, #2d2d30 0%, #252526 100%);
+            color: #cccccc;
+            padding: 12px 18px;
+            border-radius: 6px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            animation: popIn 0.2s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+            font-size: 12px;
+            border: 1px solid #3e3e42;
+            transform-origin: bottom left;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        
+        .toast:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 16px rgba(0, 0, 0, 0.5);
+        }
+        
+        .toast.success {
+            border-color: #4ec9b0;
+            background: linear-gradient(135deg, #1e3a34 0%, #2a4d47 100%);
+        }
+        
+        .toast.error {
+            border-color: #f48771;
+            background: linear-gradient(135deg, #3a1e1e 0%, #4d2a2a 100%);
+        }
+        
+        .toast-icon {
+            font-size: 16px;
+            animation: iconBounce 0.4s ease-out 0.1s;
+        }
+        
+        .toast.hiding {
+            animation: popOut 0.15s ease-in;
+            opacity: 0;
+            transform: scale(0.8) translateY(10px);
+        }
+        
+        @keyframes popIn {
+            0% {
+                transform: scale(0.6) translateY(20px);
+                opacity: 0;
+            }
+            50% {
+                transform: scale(1.05) translateY(-2px);
+            }
+            100% {
+                transform: scale(1) translateY(0);
+                opacity: 1;
+            }
+        }
+        
+        @keyframes popOut {
+            from {
+                transform: scale(1) translateY(0);
+                opacity: 1;
+            }
+            to {
+                transform: scale(0.8) translateY(10px);
+                opacity: 0;
+            }
+        }
+        
+        @keyframes iconBounce {
+            0%, 100% {
+                transform: scale(1);
+            }
+            50% {
+                transform: scale(1.2);
+            }
+        }
+        
+        /* Custom context menu styles */
+        .context-menu {
+            position: fixed;
+            background: #252526;
+            border: 1px solid #3e3e42;
+            border-radius: 4px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+            padding: 4px 0;
+            min-width: 200px;
+            z-index: 1000;
+            font-size: 12px;
+        }
+        
+        .context-menu-item {
+            padding: 6px 16px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            transition: background 0.1s;
+        }
+        
+        .context-menu-item:hover {
+            background: #094771;
+        }
+        
+        .context-menu-item .icon {
+            width: 16px;
+            height: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .context-menu-divider {
+            height: 1px;
+            background: #3e3e42;
+            margin: 4px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="toast-container" id="toast-container"></div>
+    <div id="container">
+        <div id="header">
+            <div class="toolbar-section">
+                <button class="btn danger" id="clear-btn" title="Clear all requests">
+                    <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
+                        <path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6z"/>
+                        <path fill-rule="evenodd" d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1v1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4H4.118zM2.5 3V2h11v1h-11z"/>
+                    </svg>
+                    Clear
+                </button>
+                <button class="btn" id="export-har" title="Export as HAR">
+                    <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
+                        <path d="M8 10a.5.5 0 0 0 .5-.5V3.707l2.146 2.147a.5.5 0 0 0 .708-.708l-3-3a.5.5 0 0 0-.708 0l-3 3a.5.5 0 1 0 .708.708L7.5 3.707V9.5a.5.5 0 0 0 .5.5z"/>
+                        <path d="M4 9.5a.5.5 0 0 0-1 0v5a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1v-5a.5.5 0 0 0-1 0v5H4v-5z"/>
+                    </svg>
+                    HAR
+                </button>
+                <button class="btn" id="copy-all-curl" title="Copy all as cURL">
+                    <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
+                        <path d="M4 1.5H3a2 2 0 0 0-2 2V14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V3.5a2 2 0 0 0-2-2h-1v1h1a1 1 0 0 1 1 1V14a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V3.5a1 1 0 0 1 1-1h1v-1z"/>
+                        <path d="M9.5 1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-3a.5.5 0 0 1-.5-.5v-1a.5.5 0 0 1 .5-.5h3zm-3-1A1.5 1.5 0 0 0 5 1.5v1A1.5 1.5 0 0 0 6.5 4h3A1.5 1.5 0 0 0 11 2.5v-1A1.5 1.5 0 0 0 9.5 0h-3z"/>
+                    </svg>
+                    cURL
+                </button>
+            </div>
+            <div class="divider"></div>
+            <div class="toolbar-section">
+                <button class="filter-type active" data-type="all">All</button>
+                <button class="filter-type" data-type="xhr">XHR</button>
+                <button class="filter-type" data-type="js">JS</button>
+                <button class="filter-type" data-type="css">CSS</button>
+                <button class="filter-type" data-type="img">Img</button>
+                <button class="filter-type" data-type="doc">Doc</button>
+                <button class="filter-type" data-type="other">Other</button>
+                <button class="filter-type" data-type="failed" style="color: #f48771;">Failed</button>
+                <button class="filter-type" data-type="slow" style="color: #ffa500;">Slow</button>
+            </div>
+            <div class="divider"></div>
+            <input type="text" id="filter-input" placeholder="Filter by URL, status, method, domain...">
+            <div class="domain-tags" id="domain-tags"></div>
+            <span class="request-count" id="request-count">0 requests</span>
+        </div>
+        <div id="main-content">
+            <div id="requests-list">
+                <div class="requests-header">
+                    <span class="status-code">Status</span>
+                    <span class="method">Method</span>
+                    <span class="url">URL</span>
+                    <span class="duration">Time</span>
+                </div>
+                <div class="requests-body" id="requests-body">
+                    <div id="empty-state">No requests captured yet.<br>Navigate to a page to see network activity.</div>
+                </div>
+            </div>
+            <div id="details-panel">
+                <div class="details-header">
+                    <span id="details-title">Request Details</span>
+                    <button class="close-details" id="close-details" title="Close details">✕</button>
+                </div>
+                <div class="details-tabs">
+                    <div class="tab active" data-tab="headers">Headers</div>
+                    <div class="tab" data-tab="payload">Payload</div>
+                    <div class="tab" data-tab="response">Response</div>
+                    <div class="tab" data-tab="curl">cURL</div>
+                </div>
+                <div class="details-content" id="details-content"></div>
+            </div>
+        </div>
+    </div>
+    <script src="panel.js"></script>
+</body>
+</html>

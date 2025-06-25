@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Copy Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        
+        /* Smart copy styles from main dashboard */
+        .smart-copy {
+            cursor: pointer;
+            position: relative;
+            padding: 2px 4px;
+            border-radius: 3px;
+            transition: all 0.2s ease;
+            display: inline;
+            text-decoration: none;
+        }
+        
+        .smart-copy-uuid { background: #fffbdd; }
+        .smart-copy-uuid:hover { background: #ffeb3b; outline: 1px solid #f9a825; }
+        
+        .smart-copy-jwt { background: #e3f2fd; }
+        .smart-copy-jwt:hover { background: #bbdefb; outline: 1px solid #1976d2; }
+        
+        .smart-copy-email { background: #e8f5e9; }
+        .smart-copy-email:hover { background: #c8e6c9; outline: 1px solid #388e3c; }
+        
+        .smart-copy-api-key { background: #fff3e0; }
+        .smart-copy-api-key:hover { background: #ffe0b2; outline: 1px solid #f57c00; }
+        
+        .smart-copy-url { background: #f5f5f5; }
+        .smart-copy-url:hover { background: #eeeeee; outline: 1px solid #757575; }
+        
+        .smart-copy-iso-date { background: #f3e5f5; }
+        .smart-copy-iso-date:hover { background: #e1bee7; outline: 1px solid #7b1fa2; }
+        
+        .smart-copy-base64 { background: #fce4ec; }
+        .smart-copy-base64:hover { background: #f8bbd0; outline: 1px solid #c2185b; }
+        
+        .smart-copy-objectid { background: #efebe9; }
+        .smart-copy-objectid:hover { background: #d7ccc8; outline: 1px solid #5d4037; }
+        
+        .smart-copy-bearer-token { background: #e0f2f1; }
+        .smart-copy-bearer-token:hover { background: #b2dfdb; outline: 1px solid #00695c; }
+        
+        /* Nested smart-copy elements */
+        .smart-copy .smart-copy {
+            padding: 1px 3px;
+            margin: 0 2px;
+            border: 1px solid rgba(0, 0, 0, 0.1);
+            position: relative;
+            z-index: 1;
+        }
+        
+        /* Enhance nested UUID colors within URLs */
+        .smart-copy-url .smart-copy-uuid {
+            background: #fff59d;
+            border-color: #f9a825;
+        }
+        
+        .smart-copy-url .smart-copy-uuid:hover {
+            background: #ffd54f;
+            border-color: #f57f17;
+            outline: 1px solid #f57f17;
+            z-index: 2;
+        }
+        
+        .test-section {
+            margin: 20px 0;
+            padding: 20px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+        }
+        
+        h2 { color: #333; }
+        pre { background: #f5f5f5; padding: 15px; border-radius: 4px; overflow-x: auto; }
+    </style>
+</head>
+<body>
+    <h1>Smart Copy Multi-Color Test</h1>
+    
+    <div class="test-section">
+        <h2>Test Data</h2>
+        <p>URL with UUID: <span id="url-test"></span></p>
+        <p>Bearer Token: <span id="bearer-test"></span></p>
+        <p>JWT: <span id="jwt-test"></span></p>
+        <p>Email: <span id="email-test"></span></p>
+        <p>API Key: <span id="api-key-test"></span></p>
+        <p>cURL Command:</p>
+        <pre id="curl-test"></pre>
+    </div>
+    
+    <script>
+        // Test data
+        const testData = {
+            url: 'https://api.example.com/users/123e4567-e89b-12d3-a456-426614174000/profile',
+            bearer: 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c',
+            jwt: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c',
+            email: 'user@example.com',
+            apiKey: 'sk_test_4eC39HqLyjWDarjtT1zdp7dc',
+            curl: `curl -X POST https://api.example.com/users/123e4567-e89b-12d3-a456-426614174000/update \\
+  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c" \\
+  -H "X-API-Key: sk_test_4eC39HqLyjWDarjtT1zdp7dc" \\
+  -d "email=user@example.com"`
+        };
+        
+        // Copy of the functions from dashboard
+        function getSmartCopyClass(type) {
+            const normalizedType = type.toLowerCase().replace(/\s+/g, '-');
+            return `smart-copy-${normalizedType}`;
+        }
+        
+        function processStringForSmartContent(text) {
+            let processed = text
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;');
+            
+            const matches = [];
+            
+            const patterns = [
+                { regex: /https?:\/\/[^\s'"]+/g, type: 'URL' },
+                { regex: /\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/gi, type: 'UUID' },
+                { regex: /\b[A-Za-z0-9-_]+\.[A-Za-z0-9-_]+\.?[A-Za-z0-9-_]*\b/g, type: 'JWT' },
+                { regex: /\b[^\s@]+@[^\s@]+\.[^\s@]+\b/g, type: 'Email' },
+                { regex: /\b\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{3})?Z?\b/g, type: 'ISO Date' },
+                { regex: /\b[0-9a-f]{24}\b/gi, type: 'ObjectId' },
+                { regex: /\b[A-Za-z0-9+/]{20,}={0,2}\b/g, type: 'Base64' }
+            ];
+            
+            patterns.forEach(({ regex, type }) => {
+                let match;
+                while ((match = regex.exec(processed)) !== null) {
+                    if (type === 'JWT' && match[0].split('.').length < 2) continue;
+                    if (type === 'Base64' && match[0].length < 20) continue;
+                    
+                    matches.push({
+                        start: match.index,
+                        end: match.index + match[0].length,
+                        text: match[0],
+                        type: type
+                    });
+                }
+            });
+            
+            matches.sort((a, b) => b.start - a.start);
+            
+            matches.forEach(match => {
+                const beforeMatch = processed.substring(0, match.start);
+                const afterMatch = processed.substring(match.end);
+                let matchContent = match.text;
+                
+                if (match.type === 'URL') {
+                    matchContent = matchContent.replace(
+                        /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi,
+                        (uuid) => `<span class="smart-copy ${getSmartCopyClass('UUID')}" data-copy="${uuid}" data-type="UUID" title="Click to copy UUID">${uuid}</span>`
+                    );
+                }
+                
+                const wrapped = `<span class="smart-copy ${getSmartCopyClass(match.type)}" data-copy="${match.text}" data-type="${match.type}" title="Click to copy ${match.type}">${matchContent}</span>`;
+                processed = beforeMatch + wrapped + afterMatch;
+            });
+            
+            return processed;
+        }
+        
+        // Apply processing
+        document.getElementById('url-test').innerHTML = processStringForSmartContent(testData.url);
+        document.getElementById('bearer-test').innerHTML = `<span class="smart-copy smart-copy-bearer-token" data-copy="${testData.bearer}" data-type="Bearer Token">${testData.bearer}</span>`;
+        document.getElementById('jwt-test').innerHTML = `<span class="smart-copy smart-copy-jwt" data-copy="${testData.jwt}" data-type="JWT">${testData.jwt}</span>`;
+        document.getElementById('email-test').innerHTML = `<span class="smart-copy smart-copy-email" data-copy="${testData.email}" data-type="Email">${testData.email}</span>`;
+        document.getElementById('api-key-test').innerHTML = `<span class="smart-copy smart-copy-api-key" data-copy="${testData.apiKey}" data-type="API Key">${testData.apiKey}</span>`;
+        
+        // Process cURL command (simplified version)
+        let processedCurl = testData.curl
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;');
+        
+        // Highlight URLs with nested UUIDs
+        processedCurl = processedCurl.replace(
+            /https?:\/\/[^\s'"]+/g,
+            (match) => {
+                let urlContent = match.replace(
+                    /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi,
+                    (uuid) => `<span class="smart-copy smart-copy-uuid" data-copy="${uuid}" data-type="UUID">${uuid}</span>`
+                );
+                return `<span class="smart-copy smart-copy-url" data-copy="${match}" data-type="URL">${urlContent}</span>`;
+            }
+        );
+        
+        // Highlight Bearer tokens
+        processedCurl = processedCurl.replace(
+            /Bearer\s+[A-Za-z0-9-_]+\.?[A-Za-z0-9-_]*\.?[A-Za-z0-9-_]*/g,
+            (match) => `<span class="smart-copy smart-copy-bearer-token" data-copy="${match}" data-type="Bearer Token">${match}</span>`
+        );
+        
+        // Highlight API keys
+        processedCurl = processedCurl.replace(
+            /X-API-Key:\s*([A-Za-z0-9_]{20,})/g,
+            (match, key) => match.replace(key, `<span class="smart-copy smart-copy-api-key" data-copy="${key}" data-type="API Key">${key}</span>`)
+        );
+        
+        // Highlight emails
+        processedCurl = processedCurl.replace(
+            /\b[^\s@]+@[^\s@]+\.[^\s@]+\b/g,
+            (match) => `<span class="smart-copy smart-copy-email" data-copy="${match}" data-type="Email">${match}</span>`
+        );
+        
+        document.getElementById('curl-test').innerHTML = processedCurl;
+        
+        // Add click handlers
+        document.addEventListener('click', (e) => {
+            if (e.target.classList.contains('smart-copy')) {
+                e.stopPropagation();
+                const textToCopy = e.target.dataset.copy;
+                const type = e.target.dataset.type || 'content';
+                
+                navigator.clipboard.writeText(textToCopy).then(() => {
+                    alert(`${type} copied to clipboard!`);
+                }).catch(err => {
+                    console.error('Copy failed:', err);
+                });
+            }
+        });
+    </script>
+</body>
+</html>
