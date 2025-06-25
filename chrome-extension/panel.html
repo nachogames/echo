@@ -215,6 +215,41 @@
             display: none;
             flex-direction: column;
             overflow: hidden;
+            min-width: 300px;
+            max-width: 80%;
+        }
+        
+        .splitter {
+            width: 4px;
+            background: #3e3e42;
+            cursor: col-resize;
+            display: none;
+            position: relative;
+            transition: background 0.2s ease;
+        }
+        
+        .splitter:hover {
+            background: #0e639c;
+        }
+        
+        .splitter.active {
+            background: #0e639c;
+        }
+        
+        .splitter.visible {
+            display: block;
+        }
+        
+        .splitter::after {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 2px;
+            height: 20px;
+            background: rgba(255, 255, 255, 0.3);
+            border-radius: 1px;
         }
         
         #details-panel.visible {
@@ -749,6 +784,7 @@
                     <div id="empty-state">No requests captured yet.<br>Navigate to a page to see network activity.</div>
                 </div>
             </div>
+            <div class="splitter" id="splitter"></div>
             <div id="details-panel">
                 <div class="details-header">
                     <span id="details-title">Request Details</span>

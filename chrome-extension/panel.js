@@ -77,7 +77,65 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
     });
+    
+    // Initialize splitter
+    initializeSplitter();
 });
+
+// Splitter functionality for resizable panels
+function initializeSplitter() {
+    const splitter = document.getElementById('splitter');
+    const detailsPanel = document.getElementById('details-panel');
+    const requestsList = document.getElementById('requests-list');
+    const mainContent = document.getElementById('main-content');
+    
+    let isResizing = false;
+    let startX = 0;
+    let startWidth = 0;
+    
+    splitter.addEventListener('mousedown', (e) => {
+        isResizing = true;
+        startX = e.clientX;
+        startWidth = detailsPanel.offsetWidth;
+        
+        splitter.classList.add('active');
+        document.body.style.cursor = 'col-resize';
+        document.body.style.userSelect = 'none';
+        
+        // Prevent text selection during resize
+        e.preventDefault();
+    });
+    
+    document.addEventListener('mousemove', (e) => {
+        if (!isResizing) return;
+        
+        const deltaX = startX - e.clientX; // Reverse direction for intuitive resizing
+        const newWidth = Math.max(300, Math.min(startWidth + deltaX, mainContent.offsetWidth * 0.8));
+        
+        detailsPanel.style.width = newWidth + 'px';
+        
+        // Store the width preference
+        localStorage.setItem('echo-details-panel-width', newWidth.toString());
+    });
+    
+    document.addEventListener('mouseup', () => {
+        if (isResizing) {
+            isResizing = false;
+            splitter.classList.remove('active');
+            document.body.style.cursor = '';
+            document.body.style.userSelect = '';
+        }
+    });
+    
+    // Restore saved width
+    const savedWidth = localStorage.getItem('echo-details-panel-width');
+    if (savedWidth) {
+        const width = parseInt(savedWidth);
+        if (width >= 300 && width <= window.innerWidth * 0.8) {
+            detailsPanel.style.width = width + 'px';
+        }
+    }
+}
 
 // Get resource type from request
 function getResourceType(request) {
@@ -577,11 +635,13 @@ function handleContextMenuAction(action, request) {
 // Show details panel
 function showDetailsPanel() {
     document.getElementById('details-panel').classList.add('visible');
+    document.getElementById('splitter').classList.add('visible');
 }
 
 // Hide details panel
 function hideDetailsPanel() {
     document.getElementById('details-panel').classList.remove('visible');
+    document.getElementById('splitter').classList.remove('visible');
     selectedRequest = null;
     document.querySelectorAll('.request-item').forEach(item => {
         item.classList.remove('selected');
