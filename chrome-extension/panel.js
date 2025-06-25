@@ -47,6 +47,9 @@ document.addEventListener('DOMContentLoaded', () => {
     // Copy all as cURL button
     document.getElementById('copy-all-curl').addEventListener('click', copyAllAsCurl);
 
+    // Open local dashboard button
+    document.getElementById('open-local-dashboard').addEventListener('click', openLocalDashboard);
+
     // Filter type buttons
     document.querySelectorAll('.filter-type').forEach(btn => {
         btn.addEventListener('click', () => {
@@ -259,8 +262,30 @@ function updateDomainTags() {
     });
 }
 
+// Throttling for updateRequestsList to prevent loops
+let updateRequestsListTimeout = null;
+let isUpdatingRequestsList = false;
+
 // Update requests list UI
 function updateRequestsList() {
+    // Prevent recursive calls
+    if (isUpdatingRequestsList) {
+        return;
+    }
+    
+    // Throttle rapid successive calls
+    if (updateRequestsListTimeout) {
+        clearTimeout(updateRequestsListTimeout);
+    }
+    
+    updateRequestsListTimeout = setTimeout(updateRequestsListNow, 10);
+}
+
+function updateRequestsListNow() {
+    if (isUpdatingRequestsList) return;
+    isUpdatingRequestsList = true;
+    
+    console.log('updateRequestsListNow called, requests count:', requests.length);
     const listContainer = document.getElementById('requests-body');
     
     let filteredRequests = requests;
@@ -295,6 +320,8 @@ function updateRequestsList() {
     
     if (filteredRequests.length === 0) {
         listContainer.innerHTML = '<div id="empty-state">No matching requests found.</div>';
+        // Reset the updating flag before returning
+        isUpdatingRequestsList = false;
         return;
     }
     
@@ -321,6 +348,7 @@ function updateRequestsList() {
         `;
     }).join('');
     
+    // Add event listeners to all items (innerHTML replacement already removed old listeners)
     listContainer.querySelectorAll('.request-item').forEach(item => {
         item.addEventListener('click', () => handleRequestClick(item.dataset.id));
         item.addEventListener('contextmenu', (e) => {
@@ -341,6 +369,9 @@ function updateRequestsList() {
             setTimeout(() => hintDiv.remove(), 5000);
         }
     }
+    
+    // Reset the updating flag
+    isUpdatingRequestsList = false;
 }
 
 // Get CSS class for status code
@@ -915,52 +946,128 @@ function escapeHtml(text) {
     return div.innerHTML;
 }
 
-// Generate dashboard format
+// Generate dashboard format with safe serialization
 function generateDashboardFormat(request) {
-    return {
-        request: {
-            url: request.url,
-            method: request.method,
-            headers: request.requestHeaders || []
-        },
-        payload: request.requestBody || null,
-        response: {
-            status: request.status,
-            headers: request.responseHeaders || [],
-            body: request.responseBody || ''
-        },
-        curl: generateCurl(request)
-    };
+    try {
+        // Safely extract headers to avoid circular references
+        const safeHeaders = (headers) => {
+            if (!headers || !Array.isArray(headers)) return [];
+            return headers.map(h => ({
+                name: String(h.name || h.key || ''),
+                value: String(h.value || '')
+            })).slice(0, 50); // Limit to 50 headers max
+        };
+        
+        // Safely extract string data with intelligent size limits
+        const safeString = (str, maxLength = 10000000) => { // 10MB limit
+            if (!str) return '';
+            const stringValue = String(str);
+            
+            // For very large strings, try to detect if it's repetitive JSON that will compress well
+            if (stringValue.length > maxLength) {
+                // Check if it's JSON and might compress well
+                try {
+                    JSON.parse(stringValue);
+                    // If it's valid JSON, it will likely compress well, so keep more of it
+                    const jsonMaxLength = Math.min(stringValue.length, maxLength * 2); // Allow up to 20MB for JSON
+                    if (stringValue.length > jsonMaxLength) {
+                        console.warn(`Large JSON response truncated from ${stringValue.length} to ${jsonMaxLength} characters`);
+                        return stringValue.substring(0, jsonMaxLength) + `... [TRUNCATED - Original size: ${stringValue.length} chars]`;
+                    }
+                    return stringValue;
+                } catch {
+                    // Not JSON, apply normal limit
+                    console.warn(`Large text response truncated from ${stringValue.length} to ${maxLength} characters`);
+                    return stringValue.substring(0, maxLength) + `... [TRUNCATED - Original size: ${stringValue.length} chars]`;
+                }
+            }
+            return stringValue;
+        };
+        
+        const dashboardData = {
+            request: {
+                url: String(request.url || ''),
+                method: String(request.method || 'GET'),
+                headers: safeHeaders(request.requestHeaders)
+            },
+            payload: safeString(request.requestBody),
+            response: {
+                status: Number(request.status) || 0,
+                headers: safeHeaders(request.responseHeaders),
+                body: safeString(request.responseBody)
+            },
+            curl: generateCurl(request)
+        };
+        
+        // Test that the object can be serialized
+        JSON.stringify(dashboardData);
+        
+        return dashboardData;
+    } catch (error) {
+        console.error('Error generating dashboard format:', error);
+        // Return minimal safe data
+        return {
+            request: {
+                url: String(request.url || ''),
+                method: String(request.method || 'GET'),
+                headers: []
+            },
+            payload: null,
+            response: {
+                status: Number(request.status) || 0,
+                headers: [],
+                body: 'Error: Could not serialize response data'
+            },
+            curl: `curl -X ${request.method || 'GET'} '${request.url || ''}'`
+        };
+    }
 }
 
 // Generate cURL command with pretty formatting
 function generateCurl(request) {
-    let curl = `curl -X ${request.method} \\\n  '${request.url}'`;
-    
-    if (request.requestHeaders && request.requestHeaders.length > 0) {
-        request.requestHeaders.forEach(header => {
-            if (header.name.toLowerCase() !== 'cookie') {
-                curl += ` \\\n  -H '${header.name}: ${header.value}'`;
-            }
-        });
-    }
-    
-    if (request.requestBody) {
-        // Pretty print JSON payload if possible
-        let bodyData = request.requestBody;
-        try {
-            const parsed = JSON.parse(request.requestBody);
-            bodyData = JSON.stringify(parsed, null, 2);
-        } catch {
-            // Keep original if not JSON
+    try {
+        const method = String(request.method || 'GET');
+        const url = String(request.url || '');
+        let curl = `curl -X ${method} \\\n  '${url}'`;
+        
+        if (request.requestHeaders && Array.isArray(request.requestHeaders)) {
+            request.requestHeaders.slice(0, 20).forEach(header => { // Limit headers
+                if (header && header.name && header.value) {
+                    const name = String(header.name);
+                    const value = String(header.value);
+                    if (name.toLowerCase() !== 'cookie' && value.length < 1000) { // Skip very long headers
+                        curl += ` \\\n  -H '${name}: ${value.replace(/'/g, "\\'")}}'`;
+                    }
+                }
+            });
         }
         
-        // Escape single quotes in the data
-        const escapedData = bodyData.replace(/'/g, "\\'");
-        curl += ` \\\n  -d '${escapedData}'`;
+        if (request.requestBody) {
+            // Pretty print JSON payload if possible
+            let bodyData = String(request.requestBody);
+            
+            // Limit body size
+            if (bodyData.length > 10000) {
+                bodyData = bodyData.substring(0, 10000) + '... [TRUNCATED]';
+            }
+            
+            try {
+                const parsed = JSON.parse(bodyData);
+                bodyData = JSON.stringify(parsed, null, 2);
+            } catch {
+                // Keep original if not JSON
+            }
+            
+            // Escape single quotes in the data
+            const escapedData = bodyData.replace(/'/g, "\\'");
+            curl += ` \\\n  -d '${escapedData}'`;
+        }
+        
+        return curl;
+    } catch (error) {
+        console.error('Error generating cURL:', error);
+        return `curl -X ${request.method || 'GET'} '${request.url || ''}'`;
     }
-    
-    return curl;
 }
 
 // Generate Postman Collection v2.1.0
@@ -1108,6 +1215,152 @@ function copyAllAsCurl() {
     
     // Use the same clipboard method as other copies
     copyToClipboard(curlCommands);
+}
+
+// Compress string using gzip (same as background.js)
+async function compressString(str) {
+    const stream = new CompressionStream('gzip');
+    const writer = stream.writable.getWriter();
+    const reader = stream.readable.getReader();
+    
+    writer.write(new TextEncoder().encode(str));
+    writer.close();
+    
+    const chunks = [];
+    let done = false;
+    while (!done) {
+        const { value, done: streamDone } = await reader.read();
+        done = streamDone;
+        if (value) chunks.push(value);
+    }
+    
+    // Combine chunks into single Uint8Array
+    const totalLength = chunks.reduce((sum, chunk) => sum + chunk.length, 0);
+    const result = new Uint8Array(totalLength);
+    let offset = 0;
+    for (const chunk of chunks) {
+        result.set(chunk, offset);
+        offset += chunk.length;
+    }
+    
+    return result;
+}
+
+// Open local dashboard with current requests
+async function openLocalDashboard() {
+    try {
+        console.log('Starting dashboard data preparation...', requests.length, 'requests');
+        
+        if (requests.length === 0) {
+            showToast('No requests to display', 'info');
+            return;
+        }
+        
+        // Prepare the data in the same format as the dashboard expects
+        const dashboardData = [];
+        for (let i = 0; i < requests.length; i++) {
+            try {
+                console.log(`Processing request ${i + 1}/${requests.length}...`);
+                const formatted = generateDashboardFormat(requests[i]);
+                dashboardData.push(formatted);
+            } catch (error) {
+                console.error(`Error processing request ${i}:`, error);
+                // Skip problematic requests
+                continue;
+            }
+        }
+        
+        if (dashboardData.length === 0) {
+            showToast('No valid requests to display', 'error');
+            return;
+        }
+        
+        console.log('Successfully processed', dashboardData.length, 'requests');
+        
+        // Show progress for serialization
+        showToast('Serializing data...', 'info', 1000);
+        
+        // Compress the data using the same logic as background.js
+        let jsonString;
+        try {
+            // Use a safer JSON.stringify with circular reference detection
+            const seen = new Set();
+            jsonString = JSON.stringify(dashboardData, (key, value) => {
+                // Handle circular references
+                if (typeof value === 'object' && value !== null) {
+                    if (seen.has(value)) {
+                        return '[Circular Reference]';
+                    }
+                    seen.add(value);
+                }
+                
+                // Limit extremely long strings
+                if (typeof value === 'string' && value.length > 10000000) { // 10MB string limit
+                    return value.substring(0, 10000000) + '... [String Truncated]';
+                }
+                
+                return value;
+            });
+            console.log('Original JSON length:', jsonString.length, 'characters');
+            console.log('Original JSON size:', Math.round(jsonString.length / 1024), 'KB');
+        } catch (error) {
+            console.error('JSON stringify error:', error);
+            // Fallback: try with a simpler, more limited approach
+            try {
+                console.log('Attempting fallback serialization with data limits...');
+                jsonString = JSON.stringify(dashboardData.map(req => ({
+                    request: {
+                        url: String(req.request?.url || '').substring(0, 2000),
+                        method: req.request?.method || 'GET',
+                        headers: (req.request?.headers || []).slice(0, 20).map(h => ({
+                            name: String(h.name || h.key || '').substring(0, 200),
+                            value: String(h.value || '').substring(0, 1000)
+                        }))
+                    },
+                    payload: req.payload ? String(req.payload).substring(0, 100000) : null,
+                    response: {
+                        status: req.response?.status || 0,
+                        headers: (req.response?.headers || []).slice(0, 20).map(h => ({
+                            name: String(h.name || h.key || '').substring(0, 200),
+                            value: String(h.value || '').substring(0, 1000)
+                        })),
+                        body: req.response?.body ? String(req.response.body).substring(0, 500000) : ''
+                    },
+                    curl: req.curl ? String(req.curl).substring(0, 50000) : ''
+                })));
+                console.log('Fallback serialization successful, length:', jsonString.length);
+            } catch (fallbackError) {
+                console.error('Fallback serialization also failed:', fallbackError);
+                throw new Error('Failed to serialize dashboard data - data contains circular references or is too complex');
+            }
+        }
+        
+        // Show compression progress
+        showToast('Compressing data...', 'info', 1000);
+        
+        // Use native CompressionStream for compression
+        const compressed = await compressString(jsonString);
+        console.log('Compressed size:', compressed.length, 'bytes');
+        console.log('Compression ratio:', Math.round((1 - compressed.length / jsonString.length) * 100) + '%');
+        
+        const base64Data = btoa(String.fromCharCode(...new Uint8Array(compressed)));
+        console.log('Final base64 length:', base64Data.length, 'characters');
+        
+        // Send message to background script to open the dashboard
+        const response = await sendRuntimeMessage({
+            type: 'open-local-dashboard',
+            data: base64Data
+        });
+        
+        if (response && response.success) {
+            showToast('Opening local dashboard...', 'success');
+        } else {
+            throw new Error(response?.error || 'Failed to open dashboard');
+        }
+    } catch (error) {
+        console.error('Error opening local dashboard:', error);
+        showToast(`Failed to open local dashboard: ${error.message}`, 'error');
+    }
 }
 
 // Initialize

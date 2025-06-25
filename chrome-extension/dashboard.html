@@ -1,0 +1,563 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Echo Dashboard - Network Request Inspector</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #1e1e1e;
+            color: #cccccc;
+            line-height: 1.6;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        .header {
+            background: #252526;
+            padding: 20px;
+            border-radius: 8px;
+            border: 1px solid #3e3e42;
+            margin-bottom: 20px;
+        }
+        
+        .header h1 {
+            font-size: 24px;
+            color: #cccccc;
+            margin-bottom: 10px;
+        }
+        
+        .header p {
+            color: #969696;
+            font-size: 14px;
+        }
+        
+        .actions {
+            display: flex;
+            gap: 10px;
+            margin: 20px 0;
+        }
+        
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .btn-primary {
+            background: #0e639c;
+            color: white;
+        }
+        
+        .btn-primary:hover {
+            background: #1177bb;
+        }
+        
+        .btn-postman {
+            background: #ff6c37;
+            color: white;
+        }
+        
+        .btn-postman:hover {
+            background: #e55525;
+        }
+        
+        .card {
+            background: #252526;
+            border-radius: 8px;
+            border: 1px solid #3e3e42;
+            margin-bottom: 20px;
+            overflow: hidden;
+        }
+        
+        .card-header {
+            background: #2d2d30;
+            padding: 15px 20px;
+            border-bottom: 1px solid #3e3e42;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            cursor: pointer;
+        }
+        
+        .card-header h2 {
+            font-size: 16px;
+            color: #cccccc;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .card-header .chevron {
+            transition: transform 0.3s ease;
+        }
+        
+        .card-header.collapsed .chevron {
+            transform: rotate(-90deg);
+        }
+        
+        .card-body {
+            padding: 20px;
+        }
+        
+        .card-body.collapsed {
+            display: none;
+        }
+        
+        .copy-btn {
+            padding: 4px 12px;
+            font-size: 12px;
+            background: #0e639c;
+            border: 1px solid #0e639c;
+            border-radius: 4px;
+            color: white;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        
+        .copy-btn:hover {
+            background: #1177bb;
+            border-color: #1177bb;
+        }
+        
+        .copy-btn.copied {
+            background: #4ec9b0;
+            color: white;
+            border-color: #4ec9b0;
+        }
+        
+        pre {
+            background: #1e1e1e;
+            border: 1px solid #3e3e42;
+            border-radius: 4px;
+            padding: 15px;
+            overflow-x: auto;
+            font-size: 13px;
+            line-height: 1.5;
+            font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+            white-space: pre;
+            word-wrap: normal;
+            margin: 0;
+        }
+        
+        .json-viewer {
+            font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+            font-size: 13px;
+            line-height: 1.5;
+            background: #1e1e1e;
+            border: 1px solid #3e3e42;
+            border-radius: 4px;
+            padding: 12px;
+            position: relative;
+            margin: 8px 0;
+        }
+        
+        .json-key {
+            color: #9cdcfe;
+        }
+        
+        .json-string {
+            color: #ce9178;
+        }
+        
+        .json-number {
+            color: #b5cea8;
+        }
+        
+        .json-boolean {
+            color: #569cd6;
+        }
+        
+        .json-null {
+            color: #569cd6;
+        }
+        
+        .json-toggle {
+            cursor: pointer;
+            user-select: none;
+            display: inline-block;
+            width: 16px;
+            font-size: 12px;
+            color: #969696;
+            font-family: monospace;
+            text-align: center;
+            border-radius: 2px;
+            margin-right: 2px;
+            transition: all 0.2s ease;
+        }
+        
+        .json-toggle:hover {
+            color: #cccccc;
+            background: #3e3e42;
+            transform: scale(1.1);
+        }
+        
+        .json-collapsed {
+            display: none;
+        }
+        
+        .json-preview {
+            color: #969696;
+            font-style: italic;
+            margin-left: 5px;
+            font-size: 12px;
+        }
+        
+        .smart-copy {
+            cursor: pointer;
+            text-decoration: underline;
+            text-decoration-style: dotted;
+            text-decoration-color: #969696;
+            position: relative;
+            padding: 2px 4px;
+            border-radius: 3px;
+            transition: all 0.2s ease;
+        }
+        
+        .smart-copy:hover {
+            background: #3e3e42;
+            text-decoration-color: #cccccc;
+        }
+        
+        .method-badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 3px;
+            font-size: 12px;
+            font-weight: bold;
+            margin-left: 10px;
+        }
+        
+        .method-get { background: #61affe; color: white; }
+        .method-post { background: #49cc90; color: white; }
+        .method-put { background: #fca130; color: white; }
+        .method-delete { background: #f93e3e; color: white; }
+        .method-patch { background: #50e3c2; color: white; }
+        
+        .status-badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 3px;
+            font-size: 12px;
+            font-weight: bold;
+            margin-left: 10px;
+        }
+        
+        .status-2xx { background: #49cc90; color: white; }
+        .status-3xx { background: #fca130; color: white; }
+        .status-4xx { background: #f93e3e; color: white; }
+        .status-5xx { background: #d32f2f; color: white; }
+        
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: #969696;
+        }
+        
+        .empty-state h2 {
+            font-size: 20px;
+            margin-bottom: 10px;
+            color: #cccccc;
+        }
+        
+        .empty-state p {
+            font-size: 14px;
+        }
+        
+        .manual-input {
+            margin-top: 30px;
+            padding: 20px;
+            background: #2d2d30;
+            border-radius: 8px;
+            border: 1px solid #3e3e42;
+        }
+        
+        .manual-input textarea {
+            width: 100%;
+            min-height: 100px;
+            padding: 10px;
+            border: 1px solid #3e3e42;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 12px;
+            resize: vertical;
+            background: #1e1e1e;
+            color: #cccccc;
+        }
+        
+        .manual-input textarea:focus {
+            outline: none;
+            border-color: #0e639c;
+        }
+        
+        .manual-input button {
+            margin-top: 10px;
+        }
+        
+        .headers-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        
+        .headers-table th,
+        .headers-table td {
+            padding: 8px 12px;
+            text-align: left;
+            border-bottom: 1px solid #3e3e42;
+        }
+        
+        .headers-table th {
+            background: #2d2d30;
+            font-weight: 600;
+            color: #969696;
+        }
+        
+        .headers-table tr:last-child td {
+            border-bottom: none;
+        }
+        
+        .url-display {
+            background: #2d2d30;
+            padding: 10px;
+            border-radius: 4px;
+            word-break: break-all;
+            font-family: monospace;
+            font-size: 13px;
+            border: 1px solid #3e3e42;
+        }
+        
+        /* Toast notifications */
+        .toast-container {
+            position: fixed;
+            bottom: 20px;
+            left: 20px;
+            z-index: 9999;
+            display: flex;
+            flex-direction: column-reverse;
+            gap: 10px;
+        }
+        
+        .toast {
+            background: linear-gradient(135deg, #2d2d30 0%, #252526 100%);
+            color: #cccccc;
+            padding: 14px 20px;
+            border-radius: 8px;
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            animation: popIn 0.2s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            transform-origin: bottom left;
+            border: 1px solid #3e3e42;
+        }
+        
+        .toast:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+        }
+        
+        .toast.success {
+            border-color: #4ec9b0;
+            background: linear-gradient(135deg, #1e3a34 0%, #2a4d47 100%);
+        }
+        
+        .toast.info {
+            border-color: #0e639c;
+            background: linear-gradient(135deg, #1e2a3a 0%, #2a3d4d 100%);
+        }
+        
+        .toast.error {
+            border-color: #f48771;
+            background: linear-gradient(135deg, #3a1e1e 0%, #4d2a2a 100%);
+        }
+        
+        .toast-icon {
+            font-size: 20px;
+            animation: iconBounce 0.4s ease-out 0.1s;
+        }
+        
+        .toast.hiding {
+            animation: popOut 0.15s ease-in;
+            opacity: 0;
+            transform: scale(0.8) translateY(10px);
+        }
+        
+        @keyframes popIn {
+            0% {
+                transform: scale(0.6) translateY(20px);
+                opacity: 0;
+            }
+            50% {
+                transform: scale(1.05) translateY(-2px);
+            }
+            100% {
+                transform: scale(1) translateY(0);
+                opacity: 1;
+            }
+        }
+        
+        @keyframes popOut {
+            from {
+                transform: scale(1) translateY(0);
+                opacity: 1;
+            }
+            to {
+                transform: scale(0.8) translateY(10px);
+                opacity: 0;
+            }
+        }
+        
+        @keyframes iconBounce {
+            0%, 100% {
+                transform: scale(1);
+            }
+            50% {
+                transform: scale(1.2);
+            }
+        }
+        
+        ::-webkit-scrollbar {
+            width: 10px;
+            height: 10px;
+        }
+        
+        ::-webkit-scrollbar-track {
+            background: #1e1e1e;
+        }
+        
+        ::-webkit-scrollbar-thumb {
+            background: #424242;
+            border-radius: 5px;
+        }
+        
+        ::-webkit-scrollbar-thumb:hover {
+            background: #4e4e4e;
+        }
+    </style>
+</head>
+<body>
+    <div class="toast-container" id="toast-container"></div>
+    <div class="container">
+        <div class="header">
+            <h1>Echo Dashboard</h1>
+            <p>Network Request Inspector - Debug and share HTTP requests with ease</p>
+        </div>
+        
+
+        
+        <div id="content">
+            <div class="empty-state" id="empty-state">
+                <h2>No Request Data Available</h2>
+                <p>Open this dashboard from the Echo Chrome extension or paste request data below.</p>
+                
+                <div class="manual-input">
+                    <textarea id="manual-input" placeholder="Paste your Base64-encoded request data here..."></textarea>
+                    <button class="btn btn-primary" id="load-data-btn">Load Data</button>
+                </div>
+            </div>
+            
+            <div id="request-details" style="display: none;">
+                <!-- Request Card -->
+                <div class="card">
+                    <div class="card-header" onclick="toggleCard(this)">
+                        <h2>
+                            <span class="chevron">▼</span>
+                            Request
+                            <span class="method-badge" id="request-method">GET</span>
+                        </h2>
+                        <button class="copy-btn" onclick="copySection('request'); event.stopPropagation();">Copy</button>
+                    </div>
+                    <div class="card-body">
+                        <div class="url-display" id="request-url"></div>
+                        <h3 style="margin-top: 20px; margin-bottom: 10px; font-size: 14px; color: #cccccc;">Headers</h3>
+                        <table class="headers-table" id="request-headers">
+                            <thead>
+                                <tr>
+                                    <th style="width: 30%;">Name</th>
+                                    <th>Value</th>
+                                </tr>
+                            </thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </div>
+                
+                <!-- Payload Card -->
+                <div class="card" id="payload-card">
+                    <div class="card-header" onclick="toggleCard(this)">
+                        <h2>
+                            <span class="chevron">▼</span>
+                            Payload
+                        </h2>
+                        <button class="copy-btn" onclick="copySection('payload'); event.stopPropagation();">Copy</button>
+                    </div>
+                    <div class="card-body">
+                        <pre id="payload-content"></pre>
+                    </div>
+                </div>
+                
+                <!-- Response Card -->
+                <div class="card">
+                    <div class="card-header" onclick="toggleCard(this)">
+                        <h2>
+                            <span class="chevron">▼</span>
+                            Response
+                            <span class="status-badge" id="response-status">200</span>
+                        </h2>
+                        <button class="copy-btn" onclick="copySection('response'); event.stopPropagation();">Copy</button>
+                    </div>
+                    <div class="card-body">
+                        <h3 style="margin-bottom: 10px; font-size: 14px; color: #cccccc;">Headers</h3>
+                        <table class="headers-table" id="response-headers">
+                            <thead>
+                                <tr>
+                                    <th style="width: 30%;">Name</th>
+                                    <th>Value</th>
+                                </tr>
+                            </thead>
+                            <tbody></tbody>
+                        </table>
+                        <h3 style="margin-top: 20px; margin-bottom: 10px; font-size: 14px; color: #cccccc;">Body</h3>
+                        <pre id="response-body"></pre>
+                    </div>
+                </div>
+                
+                <!-- cURL Card -->
+                <div class="card">
+                    <div class="card-header" onclick="toggleCard(this)">
+                        <h2>
+                            <span class="chevron">▼</span>
+                            cURL Command
+                        </h2>
+                        <button class="copy-btn" onclick="copySection('curl'); event.stopPropagation();">Copy</button>
+                    </div>
+                    <div class="card-body">
+                        <pre id="curl-command"></pre>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script src="dashboard.js"></script>
+</body>
+</html> 

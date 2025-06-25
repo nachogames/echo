@@ -1,5 +1,24 @@
 // Background service worker for Echo extension
 
+// Create context menu on installation
+chrome.runtime.onInstalled.addListener(() => {
+    chrome.contextMenus.create({
+        id: "openEchoDashboard",
+        title: "Open in Echo Dashboard (local)",
+        contexts: ["all"]
+    });
+});
+
+// Handle context menu clicks
+chrome.contextMenus.onClicked.addListener((info, tab) => {
+    if (info.menuItemId === "openEchoDashboard") {
+        // Open the local dashboard hosted by the extension
+        chrome.tabs.create({
+            url: chrome.runtime.getURL('dashboard.html')
+        });
+    }
+});
+
 // Compress string using gzip
 async function compressString(str) {
     const stream = new CompressionStream('gzip');
@@ -34,6 +53,9 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     try {
         if (request.type === 'open-dashboard') {
             handleOpenDashboard(request.data);
+            sendResponse({success: true});
+        } else if (request.type === 'open-local-dashboard') {
+            handleOpenLocalDashboard(request.data);
             sendResponse({success: true});
         } else if (request.type === 'run-postman') {
             handleRunPostman(request.data);
@@ -168,6 +190,19 @@ async function handleOpenDashboard(requestData) {
         });
     } catch (error) {
         console.error('Error opening dashboard:', error);
+    }
+}
+
+// Open local dashboard with compressed data
+function handleOpenLocalDashboard(base64Data) {
+    try {
+        // Open the local dashboard with compressed data
+        const dashboardUrl = chrome.runtime.getURL('dashboard.html') + '?data=' + encodeURIComponent(base64Data) + '&compressed=true';
+        chrome.tabs.create({ url: dashboardUrl });
+        
+        console.log('Local dashboard opened with data length:', base64Data.length);
+    } catch (error) {
+        console.error('Error opening local dashboard:', error);
     }
 }
 
