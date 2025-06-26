@@ -1,23 +1,40 @@
 // Background service worker for Echo extension
 
-// Create context menu on installation
-chrome.runtime.onInstalled.addListener(() => {
-    chrome.contextMenus.create({
-        id: "openEchoDashboard",
-        title: "Open in Echo Dashboard (local)",
-        contexts: ["all"]
+// Check if chrome APIs are available
+if (typeof chrome === 'undefined' || !chrome.runtime) {
+    console.error('Chrome extension APIs not available');
+} else {
+    // Create context menu on installation
+    chrome.runtime.onInstalled.addListener(() => {
+        try {
+            chrome.contextMenus.create({
+                id: "openEchoDashboard",
+                title: "Open in Echo Dashboard (local)",
+                contexts: ["all"]
+            });
+            console.log('Context menu created successfully');
+        } catch (error) {
+            console.error('Error creating context menu:', error);
+        }
     });
-});
+}
 
 // Handle context menu clicks
-chrome.contextMenus.onClicked.addListener((info, tab) => {
-    if (info.menuItemId === "openEchoDashboard") {
-        // Open the local dashboard hosted by the extension
-        chrome.tabs.create({
-            url: chrome.runtime.getURL('dashboard.html')
-        });
-    }
-});
+if (typeof chrome !== 'undefined' && chrome.contextMenus) {
+    chrome.contextMenus.onClicked.addListener((info, tab) => {
+        if (info.menuItemId === "openEchoDashboard") {
+            try {
+                // Open the local dashboard hosted by the extension
+                chrome.tabs.create({
+                    url: chrome.runtime.getURL('dashboard.html')
+                });
+                console.log('Local dashboard opened');
+            } catch (error) {
+                console.error('Error opening local dashboard:', error);
+            }
+        }
+    });
+}
 
 // Compress string using gzip
 async function compressString(str) {
@@ -49,7 +66,8 @@ async function compressString(str) {
 }
 
 // Handle messages from the DevTools panel
-chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+if (typeof chrome !== 'undefined' && chrome.runtime) {
+    chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     try {
         if (request.type === 'open-dashboard') {
             handleOpenDashboard(request.data);
@@ -136,7 +154,8 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         sendResponse({success: false, error: error.message});
     }
     return false; // Don't keep channel open for synchronous responses
-});
+    });
+}
 
 // Open dashboard with request data
 async function handleOpenDashboard(requestData) {

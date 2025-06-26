@@ -5,158 +5,184 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Project Overview
 
 Echo is a developer tool for debugging and sharing network requests. It consists of:
-- **Chrome DevTools Extension**: Captures network requests and provides context menu actions
-- **Inspector Dashboard**: Web-based viewer for analyzing requests with Postman integration
+- **Chrome DevTools Extension**: Captures network requests with advanced filtering and analysis
+- **Dual Dashboard System**: Internal (dark theme) and external (light theme) viewers for analyzing requests
+- **Postman Integration**: Direct export to Postman Collections v2.1.0
 
 ## Architecture
 
 ### Chrome Extension (`/chrome-extension`)
-- **Manifest V3** service worker architecture
-- **DevTools Panel**: Custom panel showing network requests
-- **Background Service Worker**: Handles context menu and cross-component communication
-- **Data Flow**: Network API → Panel → Storage → Background → Dashboard/Postman
+- **Manifest V3** service worker architecture with modern Chrome APIs
+- **DevTools Panel**: Custom "Echo" panel with resizable split-view interface
+- **Background Service Worker**: Handles context menus, message routing, and dashboard launching
+- **Internal Dashboard**: Built-in dashboard accessible via extension (dashboard.html)
+- **Data Flow**: Network API → Panel → Compression → Storage → Background → Dashboard/Postman
 
-### Dashboard (`/dashboard`)
-- **Single-file HTML** application with embedded CSS/JS
-- **Base64 URL parameter** for receiving request data
-- **Postman Collection v2.1.0** generation and submission
+### Dashboard Systems
+1. **Internal Dashboard** (`/chrome-extension/dashboard.html`)
+   - Dark theme, hosted within extension
+   - Accessed via "Open Local Dashboard" button
+   - Uses web_accessible_resources in manifest
+
+2. **External Dashboard** (`/dashboard/index2.html`)
+   - Light theme, designed for standalone hosting
+   - Accessed via context menu → "Open in Echo Dashboard"
+   - Configurable URL in background.js line 79
+
+Both dashboards feature:
+- Smart copy detection (UUIDs, JWTs, URLs, emails)
+- JSON syntax highlighting with collapsible sections
+- Multi-request viewing with selector
+- Compressed data transfer via URL parameters
 
 ## Development Commands
 
 ### Chrome Extension
 ```bash
-# Load unpacked extension in Chrome
+# Load unpacked extension
 # 1. Navigate to chrome://extensions
 # 2. Enable Developer mode
 # 3. Click "Load unpacked" and select /chrome-extension directory
 
-# Test DevTools panel
+# Test resizable panel
 # 1. Open Chrome DevTools (F12)
 # 2. Look for "Echo" tab
-# 3. Make network requests to see them captured
+# 3. Drag the splitter to resize request list/details panes
 ```
 
-### Dashboard
+### Dashboard Testing
 ```bash
-# The dashboard is designed to be hosted separately from the extension
-# For local testing, use the provided serve script:
+# Serve external dashboard with automatic port selection
 ./serve-dashboard.sh
+# Tries ports: 8080, 8081, 8082, 8000, 3000, 3001, 5000, 5001
 
-# Or manually:
+# Manual testing
 cd dashboard && python3 -m http.server 8000
-# Then navigate to http://localhost:8000
 
-# Update background.js line 55 with your dashboard URL:
-# - Local: http://localhost:8000/index.html
+# Update dashboard URL in background.js line 79:
+# - Local: http://localhost:8000/index2.html
 # - Production: https://your-domain.com/echo-dashboard/
-
-# Test with sample data
-# Append ?data=<base64-encoded-json> to URL
 ```
+
+## Key Features
+
+### Resizable Panel Interface
+- Draggable splitter between request list and details
+- Minimum pane width: 150px
+- Persists width to localStorage (`panelWidth`)
+- Visual hover effects and cursor feedback
+
+### Request Capture & Filtering
+- Captures all network requests via Chrome DevTools API
+- Filters by: XHR, Fetch, JS, CSS, Image, Font, Document, WebSocket, Media, Other
+- Domain tag filtering with visual pills
+- Search across URL, method, status, domain
+- Special filters: failed requests (4xx/5xx), slow requests (>1s)
+
+### Data Compression
+- Uses native CompressionStream API for gzip compression
+- Reduces dashboard URL parameter size
+- Fallback to uncompressed data on error
+- Base64 encoding for URL safety
+
+### Smart Copy System
+Pattern detection with type-specific colors:
+- **UUID**: Yellow highlighting (#fffbdd)
+- **JWT**: Light blue (#e3f2fd)
+- **Email**: Light green (#e8f5e9)
+- **URL**: Gray (#f5f5f5)
+- **Domain**: Light gray (#fafafa)
+- **Nested patterns**: Enhanced highlighting (e.g., UUID in URL)
 
 ## Key Integration Points
 
-### Request Data Format
-The extension generates two formats:
+### Request Data Formats
 1. **Dashboard Format**: Simplified JSON with request, payload, response, curl
-2. **Postman Format**: Full Collection v2.1.0 structure
+2. **Postman Format**: Full Collection v2.1.0 structure with proper escaping
+3. **HAR Format**: Standard HTTP Archive format for all requests
 
 ### Chrome Storage Keys
 - `lastRequest`: Dashboard format data
 - `lastPostmanCollection`: Postman collection data
+- `panelWidth`: Saved splitter position
 
-### Postman Integration
-- Collection submission endpoint: `https://app.getpostman.com/run-collection/fork`
-- Uses form POST with `collection` parameter containing JSON
+### Context Menu Actions
+- Copy as JSON/cURL/Schema
+- Open in Echo Dashboard (external)
+- Run in Postman
+- Export all as HAR
 
 ## Common Development Tasks
 
-### Adding New Context Menu Items
-1. Update `background.js` to create menu item
-2. Add handler in chrome.contextMenus.onClicked
-3. Access stored data from chrome.storage.local
+### Adding New Filters
+1. Update `panel.js` filter logic in request display
+2. Add filter UI elements (buttons/checkboxes)
+3. Update `filterRequests()` function
+4. Add to clear filters functionality
 
-### Modifying Request Capture
-1. Edit `panel.js` chrome.devtools.network.onRequestFinished listener
-2. Update data transformation logic
-3. Ensure both dashboard and Postman formats are generated
+### Modifying Smart Copy Patterns
+1. Edit pattern detection in dashboard files
+2. Update `detectAndHighlightPatterns()` function
+3. Add new CSS classes for highlighting
+4. Test with `test-smart-highlighting.html`
 
-### Updating Dashboard UI
-1. All changes in single `dashboard/index.html` file
-2. Maintain Base64 parsing compatibility
-3. Test with various request types (GET, POST, with/without auth)
+### Extending Context Menu
+1. Update `background.js` chrome.contextMenus.create()
+2. Add handler in onClicked listener
+3. Access data from chrome.storage.local
+4. Handle in panel.js message listener if needed
+
+### Dashboard Modifications
+1. Internal dashboard: Edit `/chrome-extension/dashboard.html`
+2. External dashboard: Edit `/dashboard/index2.html`
+3. Maintain URL parameter compatibility
+4. Test compression/decompression flow
 
 ## Testing Workflow
 1. Load extension in Chrome
 2. Open DevTools Echo panel
-3. Make test requests
-4. Right-click request → "Open in Echo Dashboard"
-5. Verify dashboard displays correctly
-6. Test "Run in Postman" button
+3. Make test requests (various types)
+4. Test resizable panel functionality
+5. Right-click → test context menu actions
+6. Verify both dashboards display correctly
+7. Test Postman export functionality
+8. Check smart copy detection
+9. Verify filter combinations
 
-## Important Notes
-- Always test with real network requests, not mock data
-- Ensure Base64 encoding/decoding handles special characters
-- Postman Collection must include proper auth headers
-- Context menu only works when right-clicking in the Echo panel
+## Important Implementation Notes
 
-## Current Dashboard Issues and Fixes (Dec 2024)
-
-### JSON Rendering Fix
-The response body must use proper structure for syntax highlighting to work:
+### JSON Rendering Structure
+Response body must use this exact structure for collapsible JSON:
 ```html
 <pre id="response-body"><div class="json-viewer">{syntaxHighlightJSON output}</div></pre>
 ```
-- Do NOT add class="json-viewer" to the pre tag
-- The syntaxHighlightJSON function generates HTML with spans for collapsible sections
 
-### Smart Copy Multi-Color Highlighting
-Implemented type-specific colors:
-- UUID: Yellow (#fffbdd → #ffeb3b hover)
-- JWT: Light blue (#e3f2fd → #bbdefb hover) 
-- Email: Light green (#e8f5e9 → #c8e6c9 hover)
-- URL: Gray (#f5f5f5 → #eeeeee hover)
-- Domain: Light gray (#fafafa → #f5f5f5 hover)
-- Nested UUID in URL: Brighter yellow (#fff59d → #ffd54f hover)
+### Error Handling
+- Extension reloads may lose context - show user warning
+- Circular references handled with custom replacer
+- Large responses truncated with size indicator
+- Compression failures fall back gracefully
 
-### Pattern Detection Requirements
-1. **URLs**: Must support `http://localhost:8080` and `https://api.example.com/path`
-2. **Domains**: Should highlight `api.dev-5-2772-1.24g.lxp.live` (without protocol)
-3. **UUIDs**: `66b61d8d-ed59-4d2c-87c4-bd2811fdc445`
-4. **JWTs**: Exactly 3 parts separated by dots, min 10 chars each part
+### Performance Considerations
+- Maximum 500 requests in memory
+- Request list updates throttled
+- JSON highlighting applied lazily
+- Smart copy detection optimized for performance
 
-### Known Issue: Domain False Positives
-Headers like "access-control-allow-credentials" are incorrectly detected as domains.
-Need to fix by:
-1. Excluding patterns with multiple hyphens between "words"
-2. Checking against common HTTP header patterns
-3. Only highlighting in appropriate contexts (not header names)
+### Known Limitations
+- Context menu only works when right-clicking in Echo panel
+- Dashboard URL length limited by browser (use compression)
+- Some auth headers may be filtered by Chrome
+- WebSocket message content not fully captured
 
+## Current Issues and Fixes (Dec 2024)
 
-## Feature Implementation System Guidelines
+### Domain Detection False Positives
+Headers like "access-control-allow-credentials" incorrectly highlighted as domains.
+Fix by excluding patterns with multiple consecutive hyphens in detection logic.
 
-### Feature Implementation Priority Rules
-- IMMEDIATE EXECUTION: Launch parallel Tasks immediately upon feature requests
-- NO CLARIFICATION: Skip asking what type of implementation unless absolutely critical
-- PARALLEL BY DEFAULT: Always use 7-parallel-Task method for efficiency
+### Panel Resize Persistence
+Splitter position saved to localStorage but may need migration if key changes.
 
-### Parallel Feature Implementation Workflow
-1. **Component**: Create main component file
-2. **Styles**: Create component styles/CSS
-3. **Tests**: Create test files  
-4. **Types**: Create type definitions
-5. **Hooks**: Create custom hooks/utilities
-6. **Integration**: Update routing, imports, exports
-7. **Remaining**: Update package.json, documentation, configuration files
-8. **Review and Validation**: Coordinate integration, run tests, verify build, check for conflicts
-
-### Context Optimization Rules
-- Strip out all comments when reading code files for analysis
-- Each task handles ONLY specified files or file types
-- Task 7 combines small config/doc updates to prevent over-splitting
-
-### Feature Implementation Guidelines
-- **CRITICAL**: Make MINIMAL CHANGES to existing patterns and structures
-- **CRITICAL**: Preserve existing naming conventions and file organization
-- Follow project's established architecture and component patterns
-- Use existing utility functions and avoid duplicating functionality
+### Compression Browser Support
+CompressionStream API requires modern browsers - include fallback for older versions.
