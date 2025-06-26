@@ -161,16 +161,30 @@
         
         #requests-list {
             flex: 1;
-            overflow-y: auto;
+            overflow: hidden;
             background: #1e1e1e;
             display: flex;
             flex-direction: column;
         }
         
+        .requests-wrapper {
+            flex: 1;
+            overflow-x: auto;
+            overflow-y: auto;
+            position: relative;
+            will-change: scroll-position;
+        }
+        
+        .requests-table {
+            min-width: 100%;
+            width: max-content;
+            position: relative;
+            isolation: isolate;
+        }
+        
         .requests-header {
             display: flex;
             align-items: center;
-            padding: 4px 8px;
             background: #2d2d30;
             border-bottom: 1px solid #3e3e42;
             font-size: 10px;
@@ -178,34 +192,108 @@
             color: #cccccc;
             position: sticky;
             top: 0;
-            z-index: 1;
+            z-index: 10;
             height: 24px;
+            min-width: max-content;
         }
         
-        .requests-header .status-code {
-            width: 36px;
+        /* Ensure consistent box model */
+        .requests-header span,
+        .request-item span {
+            box-sizing: border-box;
+        }
+        
+        /* Sticky columns container */
+        .sticky-columns {
+            display: flex;
+            position: sticky;
+            left: 0;
+            z-index: 4;
+            background: inherit;
+            transform: translateZ(0); /* Force GPU acceleration */
+            contain: layout; /* Improve isolation */
+        }
+        
+        .requests-header .sticky-columns {
+            background: #2d2d30;
+        }
+        
+        .request-item .sticky-columns {
+            background: #1e1e1e;
+        }
+        
+        /* Shadow for sticky columns */
+        .sticky-columns::after {
+            content: '';
+            position: absolute;
+            right: -8px;
+            top: 0;
+            bottom: 0;
+            width: 8px;
+            background: linear-gradient(to right, rgba(0,0,0,0.15), transparent);
+            pointer-events: none;
+        }
+        
+        .requests-header .status-code,
+        .request-item .status-code {
+            width: 44px;
+            min-width: 44px;
+            max-width: 44px;
             text-align: center;
-            margin-right: 8px;
+            padding: 2px 8px;
+            flex-shrink: 0;
         }
         
-        .requests-header .method {
-            width: 48px;
-            margin-right: 8px;
+        .requests-header .method,
+        .request-item .method {
+            width: 56px;
+            min-width: 56px;
+            max-width: 56px;
+            padding: 2px 8px;
+            flex-shrink: 0;
         }
         
-        .requests-header .url {
-            flex: 1;
+        .requests-header .url,
+        .request-item .url {
+            flex: 0 0 auto;
+            min-width: 400px;
+            padding: 2px 8px 2px 16px;
+        }
+        
+        .requests-header .duration,
+        .request-item .duration {
+            width: 60px;
+            min-width: 60px;
+            text-align: right;
+            padding: 2px 12px 2px 8px;
+            position: sticky;
+            right: 0;
+            z-index: 2;
         }
         
         .requests-header .duration {
-            width: 50px;
-            text-align: right;
-            margin-left: 8px;
+            background: #2d2d30;
+        }
+        
+        .request-item .duration {
+            background: #1e1e1e;
+        }
+        
+        
+        .requests-header .duration::before,
+        .request-item .duration::before {
+            content: '';
+            position: absolute;
+            left: -8px;
+            top: 0;
+            bottom: 0;
+            width: 8px;
+            background: linear-gradient(to left, rgba(0,0,0,0.1), transparent);
+            pointer-events: none;
         }
         
         .requests-body {
-            flex: 1;
-            overflow-y: auto;
+            display: block;
         }
         
         #details-panel {
@@ -291,21 +379,30 @@
         .details-content {
             flex: 1;
             overflow-y: auto;
+            overflow-x: auto;
             padding: 8px;
         }
         
         .request-item {
             display: flex;
             align-items: center;
-            padding: 2px 8px;
             border-bottom: 1px solid #2d2d30;
             cursor: pointer;
             user-select: none;
             position: relative;
             height: 24px;
+            min-width: max-content;
+            background: #1e1e1e;
+            width: 100%;
         }
         
+        
         .request-item:hover {
+            background-color: #2a2d2e;
+        }
+        
+        .request-item:hover .sticky-columns,
+        .request-item:hover .duration {
             background-color: #2a2d2e;
         }
         
@@ -318,11 +415,16 @@
             background: #094771;
         }
         
+        .request-item.selected .sticky-columns,
+        .request-item.selected .duration {
+            background: #094771;
+        }
+        
         .request-item.failed {
             color: #f48771;
         }
         
-        .request-item.slow::before {
+        .request-item.slow .sticky-columns::before {
             content: '';
             position: absolute;
             left: 0;
@@ -330,6 +432,7 @@
             bottom: 0;
             width: 3px;
             background: #ffa500;
+            z-index: 6;
         }
         
         .status-code {
@@ -424,8 +527,8 @@
             font-family: 'SF Mono', Monaco, monospace;
             font-size: 11px;
             line-height: 1.4;
-            white-space: pre-wrap;
-            word-wrap: break-word;
+            white-space: pre;
+            overflow-x: auto;
             position: relative;
         }
         
@@ -436,6 +539,7 @@
             padding: 12px;
             position: relative;
             margin: 8px 0;
+            overflow-x: auto;
         }
         
         .json-key { 
@@ -532,6 +636,7 @@
             font-family: 'SF Mono', Monaco, monospace;
             font-size: 11px;
             table-layout: fixed;
+            min-width: 100%;
         }
         
         .headers-table th {
@@ -546,10 +651,7 @@
         .headers-table td {
             padding: 4px 8px;
             border-bottom: 1px solid #2d2d30;
-            word-break: break-word;
-            max-width: 0;
-            overflow: hidden;
-            text-overflow: ellipsis;
+            white-space: nowrap;
         }
         
         .headers-table td:first-child {
@@ -565,6 +667,18 @@
             text-overflow: ellipsis;
             cursor: pointer;
             transition: background 0.1s ease;
+        }
+        
+        /* Support for horizontal scrolling in details panel */
+        .details-content {
+            overflow-x: auto;
+            overflow-y: auto;
+        }
+        
+        /* Visual indicator for active view mode */
+        #toggle-view.active {
+            background: #094771;
+            border-color: #0e639c;
         }
         
         .headers-table td:last-child:hover {
@@ -726,6 +840,34 @@
             background: #3e3e42;
             margin: 4px 0;
         }
+        
+        /* URL Tooltip */
+        .url-tooltip {
+            position: fixed;
+            background: #252526;
+            border: 1px solid #3e3e42;
+            border-radius: 4px;
+            padding: 8px 12px;
+            font-family: 'SF Mono', Monaco, monospace;
+            font-size: 11px;
+            color: #cccccc;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+            z-index: 1001;
+            max-width: 600px;
+            word-break: break-all;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.2s ease;
+        }
+        
+        .url-tooltip.visible {
+            opacity: 1;
+        }
+        
+        /* Settings close button hover */
+        #close-settings:hover {
+            background: rgba(255, 255, 255, 0.1) !important;
+        }
     </style>
 </head>
 <body>
@@ -761,6 +903,7 @@
                     </svg>
                     Dashboard
                 </button>
+                <button class="btn" id="settings-btn" title="Settings">⚙️</button>
             </div>
             <div class="divider"></div>
             <div class="toolbar-section">
@@ -777,18 +920,24 @@
             <div class="divider"></div>
             <input type="text" id="filter-input" placeholder="Filter by URL, status, method, domain...">
             <div class="domain-tags" id="domain-tags"></div>
-            <span class="request-count" id="request-count">0 requests</span>
+            <span class="request-count" id="request-count" style="margin-left: auto;">0 requests</span>
         </div>
         <div id="main-content">
             <div id="requests-list">
-                <div class="requests-header">
-                    <span class="status-code">Status</span>
-                    <span class="method">Method</span>
-                    <span class="url">URL</span>
-                    <span class="duration">Time</span>
-                </div>
-                <div class="requests-body" id="requests-body">
-                    <div id="empty-state">No requests captured yet.<br>Navigate to a page to see network activity.</div>
+                <div class="requests-wrapper">
+                    <div class="requests-table">
+                        <div class="requests-header">
+                            <div class="sticky-columns">
+                                <span class="status-code">Status</span>
+                                <span class="method">Method</span>
+                            </div>
+                            <span class="url">URL</span>
+                            <span class="duration">Time</span>
+                        </div>
+                        <div class="requests-body" id="requests-body">
+                            <div id="empty-state">No requests captured yet.<br>Navigate to a page to see network activity.</div>
+                        </div>
+                    </div>
                 </div>
             </div>
             <div class="splitter" id="splitter"></div>
@@ -807,6 +956,40 @@
             </div>
         </div>
     </div>
+    <div id="settings-modal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.8); z-index: 1000;">
+        <div id="settings-modal-content" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: #252526; border: 1px solid #3e3e42; border-radius: 6px; padding: 0; min-width: 400px; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);">
+            <div style="padding: 16px 20px; background: #2d2d30; border-bottom: 1px solid #3e3e42; border-radius: 6px 6px 0 0; position: relative;">
+                <h3 style="margin: 0; font-size: 14px; font-weight: 500; color: #cccccc;">Settings</h3>
+                <button id="close-settings" style="position: absolute; top: 16px; right: 16px; background: transparent; border: none; color: #cccccc; font-size: 18px; cursor: pointer; padding: 0; width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; border-radius: 4px; transition: background 0.2s;">
+                    <span style="line-height: 1;">×</span>
+                </button>
+            </div>
+            <div style="padding: 20px;">
+                <div style="margin-bottom: 16px;">
+                    <label style="display: flex; align-items: center; cursor: pointer; color: #cccccc; font-size: 12px;">
+                        <input type="checkbox" id="clear-on-reload-checkbox" style="margin-right: 10px; cursor: pointer;">
+                        <div>
+                            <div style="font-weight: 500;">Clear requests on page reload</div>
+                            <div style="color: #858585; font-size: 11px; margin-top: 2px;">Automatically clear captured requests when the page refreshes</div>
+                        </div>
+                    </label>
+                </div>
+                
+                <div style="margin-bottom: 16px; padding-top: 16px; border-top: 1px solid #3e3e42;">
+                    <label style="display: block; color: #cccccc; font-size: 12px;">
+                        <div style="font-weight: 500; margin-bottom: 8px;">URL Display Mode</div>
+                        <select id="url-display-mode" style="width: 100%; padding: 6px 8px; background: #3c3c3c; border: 1px solid #3e3e42; border-radius: 2px; color: #cccccc; font-size: 12px; cursor: pointer;">
+                            <option value="truncated">Truncated - Show path only</option>
+                            <option value="compact">Full Path - Show domain + path</option>
+                            <option value="smart">Smart - Intelligent abbreviation</option>
+                        </select>
+                        <div style="color: #858585; font-size: 11px; margin-top: 6px;">Choose how URLs are displayed in the request list</div>
+                    </label>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="url-tooltip" id="url-tooltip"></div>
     <script src="panel.js"></script>
 </body>
 </html>

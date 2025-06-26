@@ -5,7 +5,67 @@ let activeFilter = 'all';
 let searchFilter = '';
 let activeDomain = null;
 let activeTab = 'headers';
+let viewMode = localStorage.getItem('echo-view-mode') || 'truncated';
+let tooltipTimeout = null;
+let tooltipShowTimeout = null;
 const MAX_REQUESTS = 500;
+let clearOnReload = localStorage.getItem('echo-clear-on-reload') !== 'false'; // Default true
+let savedDomains = [];
+
+// Load saved domains on startup
+async function loadSavedDomains() {
+    try {
+        const data = await chrome.storage.local.get(['savedDomains', 'activeDomain']);
+        if (data.savedDomains) {
+            // Clean up old domains (older than 7 days)
+            const weekAgo = Date.now() - (7 * 24 * 60 * 60 * 1000);
+            savedDomains = data.savedDomains.filter(d => d.timestamp > weekAgo);
+            
+            // Set active domain if it still exists
+            if (data.activeDomain && savedDomains.some(d => d.domain === data.activeDomain)) {
+                activeDomain = data.activeDomain;
+            }
+        }
+    } catch (e) {
+        console.error('Failed to load saved domains:', e);
+    }
+}
+
+// Save domains to storage
+async function saveDomains() {
+    try {
+        // Get unique domains from current requests
+        const currentDomains = [...new Set(requests.map(req => req.domain))];
+        
+        // Create domain objects with timestamps
+        const domainMap = new Map();
+        
+        // Add existing saved domains
+        savedDomains.forEach(d => {
+            domainMap.set(d.domain, d.timestamp);
+        });
+        
+        // Add or update current domains with new timestamp
+        currentDomains.forEach(domain => {
+            domainMap.set(domain, Date.now());
+        });
+        
+        // Convert back to array and sort by timestamp (newest first)
+        const sortedDomains = Array.from(domainMap.entries())
+            .map(([domain, timestamp]) => ({ domain, timestamp }))
+            .sort((a, b) => b.timestamp - a.timestamp)
+            .slice(0, 20); // Keep last 20 domains
+        
+        savedDomains = sortedDomains; // Update local copy
+        
+        await chrome.storage.local.set({
+            savedDomains: sortedDomains,
+            activeDomain: activeDomain
+        });
+    } catch (e) {
+        console.error('Failed to save domains:', e);
+    }
+}
 
 // Check if extension context is valid
 let contextLostWarningShown = false;
@@ -28,7 +88,19 @@ function checkExtensionContext() {
 }
 
 // Initialize UI
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
+    // Load saved domains on startup
+    await loadSavedDomains();
+    
+    // Update domain tags to show saved domains
+    updateDomainTags();
+    
+    // Apply active domain filter if loaded
+    if (activeDomain) {
+        console.log('Restored active domain filter:', activeDomain);
+        updateRequestsList();
+    }
+    
     // Check context periodically
     setInterval(checkExtensionContext, 5000);
     
@@ -36,6 +108,7 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('clear-btn').addEventListener('click', () => {
         requests = [];
         selectedRequest = null;
+        // Keep active domain filter intact
         updateRequestsList();
         updateDomainTags();
         hideDetailsPanel();
@@ -49,6 +122,57 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Open local dashboard button
     document.getElementById('open-local-dashboard').addEventListener('click', openLocalDashboard);
+
+    // Settings button
+    document.getElementById('settings-btn').addEventListener('click', () => {
+        document.getElementById('settings-modal').style.display = 'block';
+        document.getElementById('clear-on-reload-checkbox').checked = clearOnReload;
+        
+        // Set the URL mode dropdown
+        const urlModeSelect = document.getElementById('url-display-mode');
+        if (urlModeSelect) {
+            urlModeSelect.value = viewMode;
+        }
+    });
+    
+    // Close settings modal functions
+    function closeSettingsModal() {
+        document.getElementById('settings-modal').style.display = 'none';
+    }
+    
+    // Close button
+    document.getElementById('close-settings').addEventListener('click', closeSettingsModal);
+    
+    // Click overlay to close
+    document.getElementById('settings-modal').addEventListener('click', (e) => {
+        if (e.target.id === 'settings-modal') {
+            closeSettingsModal();
+        }
+    });
+    
+    // ESC key to close
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && document.getElementById('settings-modal').style.display === 'block') {
+            closeSettingsModal();
+        }
+    });
+    
+    // Auto-save clear on reload checkbox
+    document.getElementById('clear-on-reload-checkbox').addEventListener('change', (e) => {
+        clearOnReload = e.target.checked;
+        localStorage.setItem('echo-clear-on-reload', clearOnReload);
+    });
+    
+    // Auto-save URL display mode
+    const urlModeSelect = document.getElementById('url-display-mode');
+    if (urlModeSelect) {
+        urlModeSelect.addEventListener('change', (e) => {
+            viewMode = e.target.value;
+            localStorage.setItem('echo-view-mode', viewMode);
+            updateRequestsList();
+        });
+    }
+
 
     // Filter type buttons
     document.querySelectorAll('.filter-type').forEach(btn => {
@@ -83,6 +207,29 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Initialize splitter
     initializeSplitter();
+});
+
+// Listen for page navigation/reload
+chrome.devtools.network.onNavigated.addListener(() => {
+    if (clearOnReload) {
+        // Store the active domain before clearing
+        const preservedActiveDomain = activeDomain;
+        
+        requests = [];
+        selectedRequest = null;
+        updateRequestsList();
+        updateDomainTags();
+        hideDetailsPanel();
+        
+        // Restore the active domain filter after clearing
+        if (preservedActiveDomain) {
+            activeDomain = preservedActiveDomain;
+            // Update UI to show the active domain
+            updateDomainTags();
+            updateRequestsList();
+            saveDomains(); // Save the preserved active domain
+        }
+    }
 });
 
 // Splitter functionality for resizable panels
@@ -193,6 +340,25 @@ chrome.devtools.network.onRequestFinished.addListener(async (request) => {
             slow: request.time > 1000
         };
 
+        // Parse query parameters for GET requests
+        if (request.request.method === 'GET') {
+            try {
+                const urlObj = new URL(request.request.url);
+                if (urlObj.search) {
+                    const queryParams = {};
+                    const params = new URLSearchParams(urlObj.search);
+                    for (const [key, value] of params) {
+                        queryParams[key] = value;
+                    }
+                    if (Object.keys(queryParams).length > 0) {
+                        requestData.queryParams = queryParams;
+                    }
+                }
+            } catch (error) {
+                console.error('Error parsing query parameters:', error);
+            }
+        }
+
         if (request.request.postData) {
             requestData.requestBody = request.request.postData.text;
         }
@@ -233,18 +399,40 @@ chrome.devtools.network.onRequestFinished.addListener(async (request) => {
 // Update domain tags
 function updateDomainTags() {
     const domainCounts = {};
+    
+    // Count domains from current requests
     requests.forEach(req => {
         domainCounts[req.domain] = (domainCounts[req.domain] || 0) + 1;
     });
     
+    // Add saved domains with count 0 if not in current requests
+    savedDomains.forEach(savedDomain => {
+        if (!domainCounts[savedDomain.domain]) {
+            domainCounts[savedDomain.domain] = 0;
+        }
+    });
+    
+    // Always include the active domain if it's set
+    if (activeDomain && !domainCounts[activeDomain]) {
+        domainCounts[activeDomain] = 0;
+    }
+    
+    // Sort by count (current requests first) then alphabetically
     const sortedDomains = Object.entries(domainCounts)
-        .sort((a, b) => b[1] - a[1])
+        .sort((a, b) => {
+            // Always put active domain first
+            if (a[0] === activeDomain) return -1;
+            if (b[0] === activeDomain) return 1;
+            if (b[1] !== a[1]) return b[1] - a[1];
+            return a[0].localeCompare(b[0]);
+        })
         .slice(0, 5);
     
     const container = document.getElementById('domain-tags');
     container.innerHTML = sortedDomains.map(([domain, count]) => {
         const isActive = activeDomain === domain ? 'active' : '';
-        return `<span class="domain-tag ${isActive}" data-domain="${domain}">${domain} (${count})</span>`;
+        const countDisplay = count > 0 ? ` (${count})` : ' (saved)';
+        return `<span class="domain-tag ${isActive}" data-domain="${domain}">${domain}${countDisplay}</span>`;
     }).join('');
     
     container.querySelectorAll('.domain-tag').forEach(tag => {
@@ -258,8 +446,12 @@ function updateDomainTags() {
                 tag.classList.add('active');
             }
             updateRequestsList();
+            saveDomains(); // Save domains when active domain changes
         });
     });
+    
+    // Save domains whenever they are updated
+    saveDomains();
 }
 
 // Throttling for updateRequestsList to prevent loops
@@ -334,14 +526,20 @@ function updateRequestsListNow() {
         const duration = request.duration ? `${Math.round(request.duration)}ms` : '';
         
         const urlObj = new URL(request.url);
-        const displayUrl = truncateUrl(urlObj);
+        const displayUrl = viewMode === 'compact' 
+            ? getCompactUrl(urlObj) 
+            : viewMode === 'smart'
+            ? smartAbbreviateUrl(urlObj)
+            : truncateUrl(urlObj);
         
         return `
             <div class="request-item ${isSelected ? 'selected' : ''} ${failedClass} ${slowClass}" 
                  data-id="${request.id}" 
                  title="${request.url}">
-                <span class="status-code ${statusClass}">${request.status}</span>
-                <span class="method method-${request.method}">${request.method}</span>
+                <div class="sticky-columns">
+                    <span class="status-code ${statusClass}">${request.status}</span>
+                    <span class="method method-${request.method}">${request.method}</span>
+                </div>
                 <span class="url">${displayUrl}</span>
                 <span class="duration">${duration}</span>
             </div>
@@ -355,6 +553,18 @@ function updateRequestsListNow() {
             e.preventDefault();
             handleRequestRightClick(item.dataset.id, e);
         });
+        
+        // Add hover handlers for URL tooltip
+        const urlElement = item.querySelector('.url');
+        if (urlElement) {
+            urlElement.addEventListener('mouseenter', () => {
+                const fullUrl = item.getAttribute('title');
+                if (fullUrl) {
+                    showUrlTooltip(urlElement, fullUrl);
+                }
+            });
+            urlElement.addEventListener('mouseleave', hideUrlTooltip);
+        }
     });
     
     // Add hint about right-clicking
@@ -396,10 +606,9 @@ function formatBytes(bytes) {
 function truncateUrl(urlObj) {
     const pathname = urlObj.pathname;
     const search = urlObj.search;
-    const host = urlObj.hostname;
     
-    // For very short URLs, just return pathname + search
-    if ((pathname + search).length < 50) {
+    // For very short paths, just return pathname + search
+    if ((pathname + search).length < 40) {
         return pathname + search;
     }
     
@@ -407,7 +616,7 @@ function truncateUrl(urlObj) {
     const segments = pathname.split('/').filter(s => s);
     
     if (segments.length === 0) {
-        return '/' + (search ? '?' + search.substring(1, 30) + '...' : '');
+        return '/' + (search ? '?' + search.substring(1, 20) + '...' : '');
     }
     
     if (segments.length === 1) {
@@ -415,9 +624,17 @@ function truncateUrl(urlObj) {
         return '/' + segments[0] + (search ? '?' + search.substring(1, 20) + '...' : '');
     }
     
-    // For longer paths, show: domain/.../{last-segment}
+    if (segments.length === 2) {
+        // Two segments, show both if not too long
+        const fullPath = '/' + segments.join('/');
+        if (fullPath.length <= 40) {
+            return fullPath + (search ? '?' + search.substring(1, 15) + '...' : '');
+        }
+    }
+    
+    // For longer paths, show: /.../{last-segment}
     const lastSegment = segments[segments.length - 1];
-    const truncated = host + '/.../' + lastSegment;
+    const truncated = '/.../' + lastSegment;
     
     // Add truncated query if present
     if (search) {
@@ -426,6 +643,155 @@ function truncateUrl(urlObj) {
     }
     
     return truncated;
+}
+
+// Get compact URL (domain + route)
+function getCompactUrl(urlObj) {
+    const pathname = urlObj.pathname || '/';
+    const host = urlObj.hostname;
+    return host + pathname;
+}
+
+// Smart abbreviate URL with intelligent pattern detection
+function smartAbbreviateUrl(urlObj) {
+    const pathname = urlObj.pathname || '/';
+    const search = urlObj.search || '';
+    
+    // UUID pattern
+    const uuidPattern = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi;
+    
+    // Split path into segments
+    const segments = pathname.split('/').filter(s => s);
+    
+    if (segments.length === 0) {
+        return '/' + (search ? search.substring(0, 20) + '...' : '');
+    }
+    
+    // Process each segment
+    const processedSegments = segments.map(segment => {
+        // Reset regex lastIndex for proper matching
+        uuidPattern.lastIndex = 0;
+        
+        // Check if segment is a UUID
+        if (uuidPattern.test(segment)) {
+            // Show first 8 and last 6 characters of UUID
+            return segment.substring(0, 8) + '...' + segment.substring(segment.length - 6);
+        }
+        
+        // Check if segment is a long number/ID (more than 10 digits)
+        if (/^\d{10,}$/.test(segment)) {
+            return segment.substring(0, 5) + '...' + segment.substring(segment.length - 3);
+        }
+        
+        // Check if segment is a hash (alphanumeric, more than 16 chars)
+        if (/^[a-zA-Z0-9]{16,}$/.test(segment)) {
+            return segment.substring(0, 6) + '...' + segment.substring(segment.length - 4);
+        }
+        
+        // For long text segments (more than 20 chars)
+        if (segment.length > 20) {
+            // Try to abbreviate intelligently by keeping start and end
+            const words = segment.split(/[-_]/);
+            if (words.length > 1) {
+                // If it has hyphens or underscores, abbreviate each word
+                return words.map(w => w.length > 8 ? w.substring(0, 4) + '...' : w).join('-');
+            }
+            // Otherwise just truncate
+            return segment.substring(0, 10) + '...' + segment.substring(segment.length - 6);
+        }
+        
+        // Keep short segments as-is
+        return segment;
+    });
+    
+    // Join the segments back
+    let result = '/' + processedSegments.join('/');
+    
+    // Add abbreviated query if present
+    if (search) {
+        if (search.length > 30) {
+            result += search.substring(0, 25) + '...';
+        } else {
+            result += search;
+        }
+    }
+    
+    return result;
+}
+
+// Show URL tooltip
+function showUrlTooltip(element, url) {
+    // Clear any existing hide timeout
+    if (tooltipTimeout) {
+        clearTimeout(tooltipTimeout);
+        tooltipTimeout = null;
+    }
+    
+    // Clear any existing show timeout
+    if (tooltipShowTimeout) {
+        clearTimeout(tooltipShowTimeout);
+    }
+    
+    // Add 300ms delay before showing
+    tooltipShowTimeout = setTimeout(() => {
+        const tooltip = document.getElementById('url-tooltip');
+        if (!tooltip) return;
+        
+        // Set tooltip content
+        tooltip.textContent = url;
+        
+        // Get element position
+        const rect = element.getBoundingClientRect();
+        
+        // Calculate tooltip position
+        let top = rect.top - 5;
+        let left = rect.left;
+        
+        // Show tooltip to calculate its dimensions
+        tooltip.style.display = 'block';
+        tooltip.classList.add('visible');
+        
+        // Adjust position if tooltip would go off screen
+        const tooltipRect = tooltip.getBoundingClientRect();
+        
+        // Check if tooltip would go above viewport
+        if (top - tooltipRect.height < 0) {
+            // Show below instead
+            top = rect.bottom + 5;
+        } else {
+            // Show above
+            top = rect.top - tooltipRect.height - 5;
+        }
+        
+        // Check if tooltip would go off right edge
+        if (left + tooltipRect.width > window.innerWidth - 10) {
+            left = window.innerWidth - tooltipRect.width - 10;
+        }
+        
+        // Apply position
+        tooltip.style.top = top + 'px';
+        tooltip.style.left = left + 'px';
+    }, 300);
+}
+
+// Hide URL tooltip
+function hideUrlTooltip() {
+    // Clear show timeout if still pending
+    if (tooltipShowTimeout) {
+        clearTimeout(tooltipShowTimeout);
+        tooltipShowTimeout = null;
+    }
+    
+    const tooltip = document.getElementById('url-tooltip');
+    if (!tooltip) return;
+    
+    // Add delay before hiding
+    tooltipTimeout = setTimeout(() => {
+        tooltip.classList.remove('visible');
+        setTimeout(() => {
+            tooltip.style.display = 'none';
+        }, 200);
+    }, 100);
 }
 
 // Handle request click
@@ -640,10 +1006,15 @@ function handleContextMenuAction(action, request) {
                 let payload = null;
                 let responseBody = null;
                 
-                try {
-                    payload = request.requestBody ? JSON.parse(request.requestBody) : null;
-                } catch {
-                    payload = request.requestBody; // Keep as string if not JSON
+                // For GET requests with query params, use them as payload
+                if (request.method === 'GET' && request.queryParams) {
+                    payload = request.queryParams;
+                } else {
+                    try {
+                        payload = request.requestBody ? JSON.parse(request.requestBody) : null;
+                    } catch {
+                        payload = request.requestBody; // Keep as string if not JSON
+                    }
                 }
                 
                 try {
@@ -684,13 +1055,18 @@ function handleContextMenuAction(action, request) {
                 let payloadSchema = null;
                 let responseBodySchema = null;
                 
-                try {
-                    if (request.requestBody) {
-                        const payload = JSON.parse(request.requestBody);
-                        payloadSchema = createObjectSchema(payload);
+                // For GET requests with query params, use them as payload
+                if (request.method === 'GET' && request.queryParams) {
+                    payloadSchema = createObjectSchema(request.queryParams);
+                } else {
+                    try {
+                        if (request.requestBody) {
+                            const payload = JSON.parse(request.requestBody);
+                            payloadSchema = createObjectSchema(payload);
+                        }
+                    } catch {
+                        payloadSchema = request.requestBody; // Keep as string if not JSON
                     }
-                } catch {
-                    payloadSchema = request.requestBody; // Keep as string if not JSON
                 }
                 
                 try {
@@ -833,28 +1209,46 @@ function showHeadersTab(request, container) {
 
 // Show payload tab
 function showPayloadTab(request, container) {
-    if (!request.requestBody) {
+    // Check if it's a GET request with query parameters
+    if (request.method === 'GET' && request.queryParams) {
+        try {
+            const jsonHtml = syntaxHighlightJSON(request.queryParams);
+            const queryParamsJson = JSON.stringify(request.queryParams, null, 2);
+            container.innerHTML = `
+                <div class="json-viewer">
+                    <h3 style="margin: 0 0 10px 0; color: #ddd; font-size: 12px;">Query Parameters</h3>
+                    <button class="copy-json-btn" data-content="${escapeHtml(queryParamsJson)}">Copy</button>
+                    <pre>${jsonHtml}</pre>
+                </div>
+            `;
+            addJsonClickHandlers(container, request.queryParams);
+        } catch (error) {
+            console.error('Error displaying query parameters:', error);
+            container.innerHTML = '<p style="color: #858585;">Error displaying query parameters</p>';
+        }
+    } else if (!request.requestBody) {
         container.innerHTML = '<p style="color: #858585;">No request payload</p>';
         return;
-    }
-    
-    try {
-        const parsed = JSON.parse(request.requestBody);
-        const jsonHtml = syntaxHighlightJSON(parsed);
-        container.innerHTML = `
-            <div class="json-viewer">
-                <button class="copy-json-btn" data-content="${escapeHtml(request.requestBody)}">Copy</button>
-                <pre>${jsonHtml}</pre>
-            </div>
-        `;
-        addJsonClickHandlers(container, parsed);
-    } catch {
-        container.innerHTML = `
-            <div class="json-viewer">
-                <button class="copy-json-btn" data-content="${escapeHtml(request.requestBody)}">Copy</button>
-                <pre>${escapeHtml(request.requestBody)}</pre>
-            </div>
-        `;
+    } else {
+        // Handle regular request body
+        try {
+            const parsed = JSON.parse(request.requestBody);
+            const jsonHtml = syntaxHighlightJSON(parsed);
+            container.innerHTML = `
+                <div class="json-viewer">
+                    <button class="copy-json-btn" data-content="${escapeHtml(request.requestBody)}">Copy</button>
+                    <pre>${jsonHtml}</pre>
+                </div>
+            `;
+            addJsonClickHandlers(container, parsed);
+        } catch {
+            container.innerHTML = `
+                <div class="json-viewer">
+                    <button class="copy-json-btn" data-content="${escapeHtml(request.requestBody)}">Copy</button>
+                    <pre>${escapeHtml(request.requestBody)}</pre>
+                </div>
+            `;
+        }
     }
     
     // Add copy button handler
@@ -1085,6 +1479,11 @@ function generateDashboardFormat(request) {
             },
             curl: generateCurl(request)
         };
+        
+        // Include query parameters as payload for GET requests
+        if (request.method === 'GET' && request.queryParams) {
+            dashboardData.payload = JSON.stringify(request.queryParams, null, 2);
+        }
         
         // Test that the object can be serialized
         JSON.stringify(dashboardData);
