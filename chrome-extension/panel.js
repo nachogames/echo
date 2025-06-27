@@ -14,6 +14,12 @@ let savedDomains = [];
 
 // Load saved domains on startup
 async function loadSavedDomains() {
+    // Check if extension context is valid
+    if (!chrome || !chrome.storage || !chrome.storage.local) {
+        console.warn('Chrome storage API not available');
+        return;
+    }
+    
     try {
         const data = await chrome.storage.local.get(['savedDomains', 'activeDomain']);
         if (data.savedDomains) {
@@ -27,44 +33,80 @@ async function loadSavedDomains() {
             }
         }
     } catch (e) {
-        console.error('Failed to load saved domains:', e);
+        // Handle context invalidation gracefully
+        if (e.message && e.message.includes('Extension context invalidated')) {
+            console.warn('Extension context invalidated while loading domains');
+        } else {
+            console.error('Failed to load saved domains:', e);
+        }
     }
 }
 
-// Save domains to storage
+// Debounce timer for saveDomains
+let saveDomainsTimer = null;
+
+// Save domains to storage (debounced)
 async function saveDomains() {
-    try {
-        // Get unique domains from current requests
-        const currentDomains = [...new Set(requests.map(req => req.domain))];
-        
-        // Create domain objects with timestamps
-        const domainMap = new Map();
-        
-        // Add existing saved domains
-        savedDomains.forEach(d => {
-            domainMap.set(d.domain, d.timestamp);
-        });
-        
-        // Add or update current domains with new timestamp
-        currentDomains.forEach(domain => {
-            domainMap.set(domain, Date.now());
-        });
-        
-        // Convert back to array and sort by timestamp (newest first)
-        const sortedDomains = Array.from(domainMap.entries())
-            .map(([domain, timestamp]) => ({ domain, timestamp }))
-            .sort((a, b) => b.timestamp - a.timestamp)
-            .slice(0, 20); // Keep last 20 domains
-        
-        savedDomains = sortedDomains; // Update local copy
-        
-        await chrome.storage.local.set({
-            savedDomains: sortedDomains,
-            activeDomain: activeDomain
-        });
-    } catch (e) {
-        console.error('Failed to save domains:', e);
+    // Clear any pending save
+    if (saveDomainsTimer) {
+        clearTimeout(saveDomainsTimer);
     }
+    
+    // Debounce to prevent rapid successive calls
+    saveDomainsTimer = setTimeout(async () => {
+        // Early exit if chrome APIs are not available
+        if (!chrome || !chrome.storage || !chrome.storage.local || !chrome.runtime || !chrome.runtime.id) {
+            return;
+        }
+        
+        try {
+            // Get unique domains from current requests
+            const currentDomains = [...new Set(requests.map(req => req.domain).filter(d => d))];
+            
+            // Create domain objects with timestamps
+            const domainMap = new Map();
+            
+            // Add existing saved domains
+            if (Array.isArray(savedDomains)) {
+                savedDomains.forEach(d => {
+                    if (d && d.domain) {
+                        domainMap.set(d.domain, d.timestamp);
+                    }
+                });
+            }
+            
+            // Add or update current domains with new timestamp
+            currentDomains.forEach(domain => {
+                if (domain) {
+                    domainMap.set(domain, Date.now());
+                }
+            });
+            
+            // Convert back to array and sort by timestamp (newest first)
+            const sortedDomains = Array.from(domainMap.entries())
+                .map(([domain, timestamp]) => ({ domain, timestamp }))
+                .sort((a, b) => b.timestamp - a.timestamp)
+                .slice(0, 20); // Keep last 20 domains
+            
+            savedDomains = sortedDomains; // Update local copy
+            
+            // Final check before storage operation
+            if (chrome && chrome.storage && chrome.storage.local) {
+                await chrome.storage.local.set({
+                    savedDomains: sortedDomains,
+                    activeDomain: activeDomain
+                });
+            }
+        } catch (e) {
+            // Silently ignore all errors when context is likely invalid
+            // Only log if it's clearly not a context issue
+            if (chrome && chrome.runtime && chrome.runtime.id && 
+                !e.message?.includes('Extension context invalidated') &&
+                !e.message?.includes('Cannot read properties of undefined')) {
+                console.error('Failed to save domains:', e);
+            }
+        }
+    }, 500); // Wait 500ms before saving
 }
 
 // Check if extension context is valid
@@ -100,6 +142,45 @@ document.addEventListener('DOMContentLoaded', async () => {
         console.log('Restored active domain filter:', activeDomain);
         updateRequestsList();
     }
+    
+    // Check if there are buffered requests from devtools.js
+    if (window.bufferedRequests && window.bufferedRequests.length > 0) {
+        console.log(`Loading ${window.bufferedRequests.length} buffered requests`);
+        
+        // Process each buffered request
+        window.bufferedRequests.forEach(bufferedRequest => {
+            // Extract the raw request data
+            const rawRequest = bufferedRequest._rawRequest;
+            if (rawRequest) {
+                // Process it through the normal pipeline
+                processNetworkRequest(rawRequest, true); // true = from buffer
+            } else {
+                // Fallback: add the pre-processed request directly
+                requests.push({
+                    ...bufferedRequest,
+                    fromBuffer: true
+                });
+            }
+        });
+        
+        // Clear the buffer after processing
+        if (window.clearBufferedRequests) {
+            window.clearBufferedRequests();
+        }
+        
+        // Update the UI
+        updateRequestsList();
+        updateDomainTags();
+    }
+    
+    // Set up function for future buffer updates
+    window.updateWithBufferedRequests = function() {
+        if (window.bufferedRequests && window.bufferedRequests.length > 0) {
+            console.log('Updating with new buffered requests');
+            // Process any new buffered requests
+            // This handles the case where panel is hidden and shown again
+        }
+    };
     
     // Check context periodically
     setInterval(checkExtensionContext, 5000);
@@ -318,8 +399,8 @@ function getResourceType(request) {
     return 'other';
 }
 
-// Listen for network requests
-chrome.devtools.network.onRequestFinished.addListener(async (request) => {
+// Process a network request (can be called from buffer or live capture)
+function processNetworkRequest(request, fromBuffer = false) {
     try {
         // Skip data URLs and chrome-extension URLs
         if (request.request.url.startsWith('data:') || 
@@ -347,7 +428,8 @@ chrome.devtools.network.onRequestFinished.addListener(async (request) => {
             endTime: endTime,
             domain: new URL(request.request.url).hostname,
             failed: request.response.status >= 400,
-            slow: request.time > 1000
+            slow: request.time > 1000,
+            fromBuffer: fromBuffer
         };
 
         // Parse query parameters for GET requests
@@ -373,7 +455,7 @@ chrome.devtools.network.onRequestFinished.addListener(async (request) => {
             requestData.requestBody = request.request.postData.text;
         }
 
-        request.getContent((content, encoding) => {
+        request.getContent((content) => {
             if (content) {
                 // Don't truncate response body - let compression handle large data
                 requestData.responseBody = content;
@@ -385,83 +467,102 @@ chrome.devtools.network.onRequestFinished.addListener(async (request) => {
                 requests = requests.slice(-MAX_REQUESTS);
             }
             
-            // Add loading state to prevent strobe effect
-            const requestsBody = document.getElementById('requests-body');
-            if (requestsBody) {
-                requestsBody.classList.add('loading');
-            }
-            
-            updateRequestsList();
-            updateDomainTags();
-            
-            // Remove loading state after a short delay
-            setTimeout(() => {
+            // Only update UI for live requests to avoid flashing
+            if (!fromBuffer) {
+                // Add loading state to prevent strobe effect
+                const requestsBody = document.getElementById('requests-body');
                 if (requestsBody) {
-                    requestsBody.classList.remove('loading');
+                    requestsBody.classList.add('loading');
                 }
-            }, 100);
+                
+                updateRequestsList();
+                updateDomainTags();
+                
+                // Remove loading state after a short delay
+                setTimeout(() => {
+                    if (requestsBody) {
+                        requestsBody.classList.remove('loading');
+                    }
+                }, 100);
+            }
         });
     } catch (error) {
         console.error('Error processing request:', error);
     }
+}
+
+// Listen for network requests
+chrome.devtools.network.onRequestFinished.addListener((request) => {
+    processNetworkRequest(request, false);
 });
 
 // Update domain tags
 function updateDomainTags() {
-    const domainCounts = {};
-    
-    // Count domains from current requests
-    requests.forEach(req => {
-        domainCounts[req.domain] = (domainCounts[req.domain] || 0) + 1;
-    });
-    
-    // Add saved domains with count 0 if not in current requests
-    savedDomains.forEach(savedDomain => {
-        if (!domainCounts[savedDomain.domain]) {
-            domainCounts[savedDomain.domain] = 0;
-        }
-    });
-    
-    // Always include the active domain if it's set
-    if (activeDomain && !domainCounts[activeDomain]) {
-        domainCounts[activeDomain] = 0;
-    }
-    
-    // Sort by count (current requests first) then alphabetically
-    const sortedDomains = Object.entries(domainCounts)
-        .sort((a, b) => {
-            // Always put active domain first
-            if (a[0] === activeDomain) return -1;
-            if (b[0] === activeDomain) return 1;
-            if (b[1] !== a[1]) return b[1] - a[1];
-            return a[0].localeCompare(b[0]);
-        })
-        .slice(0, 5);
-    
-    const container = document.getElementById('domain-tags');
-    container.innerHTML = sortedDomains.map(([domain, count]) => {
-        const isActive = activeDomain === domain ? 'active' : '';
-        const countDisplay = count > 0 ? ` (${count})` : ' (saved)';
-        return `<span class="domain-tag ${isActive}" data-domain="${domain}">${domain}${countDisplay}</span>`;
-    }).join('');
-    
-    container.querySelectorAll('.domain-tag').forEach(tag => {
-        tag.addEventListener('click', () => {
-            if (activeDomain === tag.dataset.domain) {
-                activeDomain = null;
-                tag.classList.remove('active');
-            } else {
-                document.querySelectorAll('.domain-tag').forEach(t => t.classList.remove('active'));
-                activeDomain = tag.dataset.domain;
-                tag.classList.add('active');
-            }
-            updateRequestsList();
-            saveDomains(); // Save domains when active domain changes
+    try {
+        const domainCounts = {};
+        
+        // Count domains from current requests
+        requests.forEach(req => {
+            domainCounts[req.domain] = (domainCounts[req.domain] || 0) + 1;
         });
-    });
-    
-    // Save domains whenever they are updated
-    saveDomains();
+        
+        // Add saved domains with count 0 if not in current requests
+        savedDomains.forEach(savedDomain => {
+            if (!domainCounts[savedDomain.domain]) {
+                domainCounts[savedDomain.domain] = 0;
+            }
+        });
+        
+        // Always include the active domain if it's set
+        if (activeDomain && !domainCounts[activeDomain]) {
+            domainCounts[activeDomain] = 0;
+        }
+        
+        // Sort by count (current requests first) then alphabetically
+        const sortedDomains = Object.entries(domainCounts)
+            .sort((a, b) => {
+                // Always put active domain first
+                if (a[0] === activeDomain) return -1;
+                if (b[0] === activeDomain) return 1;
+                if (b[1] !== a[1]) return b[1] - a[1];
+                return a[0].localeCompare(b[0]);
+            })
+            .slice(0, 5);
+        
+        const container = document.getElementById('domain-tags');
+        if (!container) {
+            console.warn('Domain tags container not found');
+            return;
+        }
+        
+        container.innerHTML = sortedDomains.map(([domain, count]) => {
+            const isActive = activeDomain === domain ? 'active' : '';
+            const countDisplay = count > 0 ? ` (${count})` : ' (saved)';
+            return `<span class="domain-tag ${isActive}" data-domain="${domain}">${domain}${countDisplay}</span>`;
+        }).join('');
+        
+        container.querySelectorAll('.domain-tag').forEach(tag => {
+            tag.addEventListener('click', () => {
+                if (activeDomain === tag.dataset.domain) {
+                    activeDomain = null;
+                    tag.classList.remove('active');
+                } else {
+                    document.querySelectorAll('.domain-tag').forEach(t => t.classList.remove('active'));
+                    activeDomain = tag.dataset.domain;
+                    tag.classList.add('active');
+                }
+                updateRequestsList();
+                
+                // Save domains (now debounced, no need for error handling)
+                saveDomains();
+            });
+        });
+        
+        // Save domains after updating tags (now debounced)
+        saveDomains();
+    } catch (error) {
+        console.error('Error updating domain tags:', error);
+    }
 }
 
 // Throttling for updateRequestsList to prevent loops
@@ -1213,14 +1314,22 @@ function showHeadersTab(request, container) {
         const headersJson = JSON.stringify(headersData, null, 2);
         
         container.innerHTML = `
+            <div class="json-viewer-toolbar">
+                <button class="copy-json-btn">Copy</button>
+            </div>
             <div class="json-viewer">
-                <button class="copy-json-btn" data-content="${escapeHtml(headersJson)}">Copy</button>
                 <pre>${jsonHtml}</pre>
             </div>
             <div style="margin-top: 20px; padding: 10px; background: #2d2d30; border-radius: 4px; font-size: 11px; color: #969696;">
                 Tip: Click on any value to copy it to clipboard. Right-click on a request for more options.
             </div>
         `;
+        
+        // Add copy button handler
+        const copyBtn = container.querySelector('.copy-json-btn');
+        if (copyBtn) {
+            copyBtn.addEventListener('click', () => copyToClipboard(headersJson));
+        }
         
         addJsonClickHandlers(container, headersData);
     } catch (error) {
@@ -1238,12 +1347,21 @@ function showPayloadTab(request, container) {
             const jsonHtml = syntaxHighlightJSON(request.queryParams);
             const queryParamsJson = JSON.stringify(request.queryParams, null, 2);
             container.innerHTML = `
+                <h3 style="margin: 0 0 10px 0; color: #ddd; font-size: 12px;">Query Parameters</h3>
+                <div class="json-viewer-toolbar">
+                    <button class="copy-json-btn">Copy</button>
+                </div>
                 <div class="json-viewer">
-                    <h3 style="margin: 0 0 10px 0; color: #ddd; font-size: 12px;">Query Parameters</h3>
-                    <button class="copy-json-btn" data-content="${escapeHtml(queryParamsJson)}">Copy</button>
                     <pre>${jsonHtml}</pre>
                 </div>
             `;
+            
+            // Add copy button handler
+            const copyBtn = container.querySelector('.copy-json-btn');
+            if (copyBtn) {
+                copyBtn.addEventListener('click', () => copyToClipboard(queryParamsJson));
+            }
+            
             addJsonClickHandlers(container, request.queryParams);
         } catch (error) {
             console.error('Error displaying query parameters:', error);
@@ -1258,26 +1376,37 @@ function showPayloadTab(request, container) {
             const parsed = JSON.parse(request.requestBody);
             const jsonHtml = syntaxHighlightJSON(parsed);
             container.innerHTML = `
+                <div class="json-viewer-toolbar">
+                    <button class="copy-json-btn">Copy</button>
+                </div>
                 <div class="json-viewer">
-                    <button class="copy-json-btn" data-content="${escapeHtml(request.requestBody)}">Copy</button>
                     <pre>${jsonHtml}</pre>
                 </div>
             `;
+            
+            // Add copy button handler
+            const copyBtn = container.querySelector('.copy-json-btn');
+            if (copyBtn) {
+                copyBtn.addEventListener('click', () => copyToClipboard(request.requestBody));
+            }
+            
             addJsonClickHandlers(container, parsed);
         } catch {
             container.innerHTML = `
+                <div class="json-viewer-toolbar">
+                    <button class="copy-json-btn">Copy</button>
+                </div>
                 <div class="json-viewer">
-                    <button class="copy-json-btn" data-content="${escapeHtml(request.requestBody)}">Copy</button>
                     <pre>${escapeHtml(request.requestBody)}</pre>
                 </div>
             `;
+            
+            // Add copy button handler
+            const copyBtn = container.querySelector('.copy-json-btn');
+            if (copyBtn) {
+                copyBtn.addEventListener('click', () => copyToClipboard(request.requestBody));
+            }
         }
-    }
-    
-    // Add copy button handler
-    const copyBtn = container.querySelector('.copy-json-btn');
-    if (copyBtn) {
-        copyBtn.addEventListener('click', () => copyToClipboard(copyBtn.dataset.content));
     }
 }
 
@@ -1292,25 +1421,36 @@ function showResponseTab(request, container) {
         const parsed = JSON.parse(request.responseBody);
         const jsonHtml = syntaxHighlightJSON(parsed);
         container.innerHTML = `
+            <div class="json-viewer-toolbar">
+                <button class="copy-json-btn">Copy</button>
+            </div>
             <div class="json-viewer">
-                <button class="copy-json-btn" data-content="${escapeHtml(request.responseBody)}">Copy</button>
                 <pre>${jsonHtml}</pre>
             </div>
         `;
+        
+        // Add copy button handler
+        const copyBtn = container.querySelector('.copy-json-btn');
+        if (copyBtn) {
+            copyBtn.addEventListener('click', () => copyToClipboard(request.responseBody));
+        }
+        
         addJsonClickHandlers(container, parsed);
     } catch {
         container.innerHTML = `
+            <div class="json-viewer-toolbar">
+                <button class="copy-json-btn">Copy</button>
+            </div>
             <div class="json-viewer">
-                <button class="copy-json-btn" data-content="${escapeHtml(request.responseBody)}">Copy</button>
                 <pre>${escapeHtml(request.responseBody)}</pre>
             </div>
         `;
-    }
-    
-    // Add copy button handler
-    const copyBtn = container.querySelector('.copy-json-btn');
-    if (copyBtn) {
-        copyBtn.addEventListener('click', () => copyToClipboard(copyBtn.dataset.content));
+        
+        // Add copy button handler
+        const copyBtn = container.querySelector('.copy-json-btn');
+        if (copyBtn) {
+            copyBtn.addEventListener('click', () => copyToClipboard(request.responseBody));
+        }
     }
 }
 
@@ -1318,8 +1458,10 @@ function showResponseTab(request, container) {
 function showCurlTab(request, container) {
     const curl = generateCurl(request);
     container.innerHTML = `
+        <div class="json-viewer-toolbar">
+            <button class="copy-json-btn">Copy</button>
+        </div>
         <div class="json-viewer">
-            <button class="copy-json-btn" data-content="${escapeHtml(curl)}">Copy</button>
             <pre>${escapeHtml(curl)}</pre>
         </div>
     `;
@@ -1327,7 +1469,7 @@ function showCurlTab(request, container) {
     // Add copy button handler
     const copyBtn = container.querySelector('.copy-json-btn');
     if (copyBtn) {
-        copyBtn.addEventListener('click', () => copyToClipboard(copyBtn.dataset.content));
+        copyBtn.addEventListener('click', () => copyToClipboard(curl));
     }
 }
 
