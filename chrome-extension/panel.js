@@ -104,6 +104,16 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Check context periodically
     setInterval(checkExtensionContext, 5000);
     
+    // Add event delegation for JSON toggle clicks
+    document.addEventListener('click', (e) => {
+        if (e.target.classList.contains('json-toggle')) {
+            const toggleId = e.target.getAttribute('data-toggle-id');
+            if (toggleId) {
+                toggleJSON(toggleId);
+            }
+        }
+    });
+    
     // Clear button handler
     document.getElementById('clear-btn').addEventListener('click', () => {
         requests = [];
@@ -846,15 +856,20 @@ function handleRequestRightClick(requestId, event) {
             const dashboardData = generateDashboardFormat(request);
             const postmanCollection = generatePostmanCollection(request);
             
-            chrome.storage.local.set({
-                lastRequest: dashboardData,
-                lastPostmanCollection: postmanCollection,
-                lastRequestId: request.id
-            }, () => {
-                if (chrome.runtime.lastError) {
-                    console.error('Error storing request data:', chrome.runtime.lastError);
-                }
-            });
+            // Check if chrome.storage is still valid before using it
+            if (chrome.runtime && chrome.runtime.id) {
+                chrome.storage.local.set({
+                    lastRequest: dashboardData,
+                    lastPostmanCollection: postmanCollection,
+                    lastRequestId: request.id
+                }, () => {
+                    if (chrome.runtime.lastError) {
+                        console.error('Error storing request data:', chrome.runtime.lastError);
+                    }
+                });
+            } else {
+                console.warn('Extension context invalidated, skipping storage');
+            }
         } catch (error) {
             console.error('Error preparing request data for context menu:', error);
         }
@@ -1400,32 +1415,166 @@ function copyToClipboard(text, element) {
     });
 }
 
-// Syntax highlight JSON
-function syntaxHighlightJSON(obj) {
-    const json = JSON.stringify(obj, null, 2);
-    // First escape HTML entities
-    const escaped = json
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;');
+// Syntax highlight JSON with interactive expand/collapse
+function syntaxHighlightJSON(obj, expanded = true) {
+    const uid = 'json_' + Math.random().toString(36).substr(2, 9);
     
-    return escaped.replace(/("(\\u[a-fA-F0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g, 
-        function (match) {
-            let cls = 'json-number';
-            if (/^"/.test(match)) {
-                if (/:$/.test(match)) {
-                    cls = 'json-key';
-                } else {
-                    cls = 'json-string';
-                }
-            } else if (/true|false/.test(match)) {
-                cls = 'json-boolean';
-            } else if (/null/.test(match)) {
-                cls = 'json-null';
-            }
-            return '<span class="' + cls + '">' + match + '</span>';
+    function processValue(data, depth = 0) {
+        if (data === null) return '<span class="json-null">null</span>';
+        if (typeof data === 'boolean') return '<span class="json-boolean">' + data + '</span>';
+        if (typeof data === 'number') return '<span class="json-number">' + data + '</span>';
+        if (typeof data === 'string') {
+            const escaped = data
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+            return '<span class="json-string">"' + escaped + '"</span>';
         }
-    );
+        
+        const isArray = Array.isArray(data);
+        const keys = Object.keys(data);
+        
+        if (keys.length === 0) {
+            return isArray ? '[]' : '{}';
+        }
+        
+        const id = uid + '_depth' + depth + '_' + Math.random().toString(36).substr(2, 9);
+        const preview = isArray ? `...${keys.length} items` : `...${keys.length} keys`;
+        
+        let html = '';
+        
+        // Opening bracket with inline preview
+        html += isArray ? '[' : '{';
+        html += '<span class="json-preview" id="preview_' + id + '" style="display: none;">' + preview + '</span>' + '<span style="display: none;" id="preview_bracket_' + id + '">' + (isArray ? ']' : '}') + '</span>';
+        
+        // Children container
+        html += '<div id="' + id + '" style="display: block;">';
+        
+        keys.forEach((key, index) => {
+            const value = data[key];
+            const isNested = value !== null && typeof value === 'object' && Object.keys(value).length > 0;
+            
+            html += '<div class="json-line">';
+            
+            // Generate child ID once if nested
+            let childId = null;
+            if (isNested) {
+                // Create a more unique ID by including the key name and a random component
+                const safeKey = key.replace(/[^a-zA-Z0-9]/g, '_');
+                childId = uid + '_d' + depth + '_k' + safeKey + '_i' + index + '_' + Math.random().toString(36).substr(2, 5);
+            }
+            
+            // Gutter with toggle for nested objects/arrays
+            if (isNested) {
+                html += '<span class="json-gutter"><span class="json-toggle" data-toggle-id="' + childId + '" id="toggle_' + childId + '">' + '▼' + '</span></span>';
+            } else {
+                html += '<span class="json-gutter"></span>';
+            }
+            
+            // Code content
+            html += '<span class="json-code">' + ' '.repeat(depth + 1);
+            
+            if (!isArray) {
+                const escapedKey = key
+                    .replace(/&/g, '&amp;')
+                    .replace(/</g, '&lt;')
+                    .replace(/>/g, '&gt;')
+                    .replace(/"/g, '&quot;')
+                    .replace(/'/g, '&#39;');
+                html += '<span class="json-key">"' + escapedKey + '"</span>: ';
+            }
+            
+            if (isNested) {
+                // For nested objects, process them recursively with the same childId
+                const childHtml = processValue(value, depth + 1);
+                // Extract the generated ID from the child HTML and replace it
+                const idMatch = childHtml.match(/id="(json_[^"]+)"/);
+                if (idMatch) {
+                    const generatedId = idMatch[1];
+                    let modifiedChildHtml = childHtml
+                        .replace('id="preview_' + generatedId + '"', 'id="preview_' + childId + '"')
+                        .replace('id="preview_bracket_' + generatedId + '"', 'id="preview_bracket_' + childId + '"')
+                        .replace('id="' + generatedId + '"', 'id="' + childId + '"');
+                    
+                    // If not the last item, add comma to the closing bracket
+                    if (index < keys.length - 1) {
+                        // Find the last closing bracket and add comma
+                        const lastBracketIndex = modifiedChildHtml.lastIndexOf('</span></div>');
+                        const beforeLastLine = modifiedChildHtml.substring(0, lastBracketIndex);
+                        const lastBracket = beforeLastLine.match(/([}\]])(\s*)$/);
+                        if (lastBracket) {
+                            const bracketPos = beforeLastLine.lastIndexOf(lastBracket[0]);
+                            modifiedChildHtml = beforeLastLine.substring(0, bracketPos) + lastBracket[1] + ',' + lastBracket[2] + modifiedChildHtml.substring(lastBracketIndex);
+                        }
+                    }
+                    html += modifiedChildHtml;
+                } else {
+                    html += childHtml;
+                    if (index < keys.length - 1) html += ',';
+                }
+            } else {
+                html += processValue(value, depth + 1);
+                if (index < keys.length - 1) html += ',';
+            }
+            
+            html += '</span></div>';
+        });
+        
+        // Add closing bracket line here
+        html += '<div class="json-line">';
+        html += '<span class="json-gutter"></span>';
+        html += '<span class="json-code">' + ' '.repeat(depth);
+        html += isArray ? ']' : '}';
+        html += '</span></div>';
+        
+        html += '</div>';
+        
+        return html;
+    }
+    
+    // For root level, wrap in line
+    let result = '<div class="json-line">';
+    result += '<span class="json-gutter"><span class="json-toggle" data-toggle-id="root_' + uid + '" id="toggle_root_' + uid + '">▼</span></span>';
+    result += '<span class="json-code">';
+    
+    const processedHtml = processValue(obj, 0);
+    // Extract and replace root IDs
+    const rootIdMatch = processedHtml.match(/id="(json_[^"]+)"/);
+    if (rootIdMatch) {
+        const generatedRootId = rootIdMatch[1];
+        result += processedHtml
+            .replace('id="preview_' + generatedRootId + '"', 'id="preview_root_' + uid + '"')
+            .replace('id="preview_bracket_' + generatedRootId + '"', 'id="preview_bracket_root_' + uid + '"')
+            .replace('id="' + generatedRootId + '"', 'id="root_' + uid + '"');
+    } else {
+        result += processedHtml;
+    }
+    
+    result += '</span></div>';
+    
+    return '<div class="json-wrapper">' + result + '</div>';
+}
+
+// Toggle JSON section
+function toggleJSON(id) {
+    const element = document.getElementById(id);
+    const toggle = document.getElementById('toggle_' + id);
+    const preview = document.getElementById('preview_' + id);
+    const previewBracket = document.getElementById('preview_bracket_' + id);
+    
+    if (element.style.display === 'none') {
+        element.style.display = 'block';
+        preview.style.display = 'none';
+        if (previewBracket) previewBracket.style.display = 'none';
+        toggle.textContent = '▼';
+    } else {
+        element.style.display = 'none';
+        preview.style.display = 'inline';
+        if (previewBracket) previewBracket.style.display = 'inline';
+        toggle.textContent = '▶';
+    }
 }
 
 // Escape HTML
