@@ -1166,46 +1166,54 @@ function showRequestDetails(request) {
 
 // Show headers tab
 function showHeadersTab(request, container) {
-    let html = '<h3>General</h3>';
-    html += '<table class="headers-table">';
-    html += `<tr><td>URL</td><td title="${escapeHtml(request.url)}">${escapeHtml(request.url)}</td></tr>`;
-    html += `<tr><td>Method</td><td>${request.method}</td></tr>`;
-    html += `<tr><td>Status</td><td>${request.status}</td></tr>`;
-    html += `<tr><td>Duration</td><td>${request.duration}ms</td></tr>`;
-    html += `<tr><td>Size</td><td>${formatBytes(request.size)}</td></tr>`;
-    html += '</table>';
-    
-    html += '<h3>Request Headers</h3>';
-    html += '<table class="headers-table">';
-    if (request.requestHeaders) {
-        request.requestHeaders.forEach(header => {
-            html += `<tr><td>${escapeHtml(header.name)}</td><td title="${escapeHtml(header.value)}">${escapeHtml(header.value)}</td></tr>`;
-        });
+    try {
+        // Build headers object structure
+        const headersData = {
+            general: {
+                url: request.url,
+                method: request.method,
+                status: request.status,
+                duration: `${request.duration}ms`,
+                size: formatBytes(request.size)
+            },
+            requestHeaders: {},
+            responseHeaders: {}
+        };
+        
+        // Convert request headers array to object
+        if (request.requestHeaders) {
+            request.requestHeaders.forEach(header => {
+                headersData.requestHeaders[header.name] = header.value;
+            });
+        }
+        
+        // Convert response headers array to object
+        if (request.responseHeaders) {
+            request.responseHeaders.forEach(header => {
+                headersData.responseHeaders[header.name] = header.value;
+            });
+        }
+        
+        const jsonHtml = syntaxHighlightJSON(headersData);
+        const headersJson = JSON.stringify(headersData, null, 2);
+        
+        container.innerHTML = `
+            <div class="json-viewer">
+                <button class="copy-json-btn" data-content="${escapeHtml(headersJson)}">Copy</button>
+                <pre>${jsonHtml}</pre>
+            </div>
+            <div style="margin-top: 20px; padding: 10px; background: #2d2d30; border-radius: 4px; font-size: 11px; color: #969696;">
+                Tip: Click on any value to copy it to clipboard. Right-click on a request for more options.
+            </div>
+        `;
+        
+        addJsonClickHandlers(container, headersData);
+    } catch (error) {
+        console.error('Error displaying headers:', error);
+        container.innerHTML = '<p style="color: #858585;">Error displaying headers</p>';
     }
-    html += '</table>';
-    
-    html += '<h3>Response Headers</h3>';
-    html += '<table class="headers-table">';
-    if (request.responseHeaders) {
-        request.responseHeaders.forEach(header => {
-            html += `<tr><td>${escapeHtml(header.name)}</td><td title="${escapeHtml(header.value)}">${escapeHtml(header.value)}</td></tr>`;
-        });
-    }
-    html += '</table>';
-    
-    html += '<div style="margin-top: 20px; padding: 10px; background: #2d2d30; border-radius: 4px; font-size: 11px; color: #969696;">';
-    html += 'Tip: Right-click on a request in the list to access export options (Copy as cURL, Open in Dashboard, Run in Postman)';
-    html += '</div>';
-    
-    container.innerHTML = html;
-    
-    // Add click handlers to copy values
-    container.querySelectorAll('.headers-table td:last-child').forEach(td => {
-        td.addEventListener('click', () => {
-            copyToClipboard(td.textContent);
-        });
-    });
 }
+
 
 // Show payload tab
 function showPayloadTab(request, container) {
