@@ -1616,7 +1616,7 @@ function syntaxHighlightJSON(obj, expanded = true) {
             }
             
             // Code content
-            html += '<span class="json-code">' + ' '.repeat(depth + 1);
+            html += '<span class="json-code">' + '  '.repeat(depth + 1);
             
             if (!isArray) {
                 const escapedKey = key
@@ -1667,7 +1667,7 @@ function syntaxHighlightJSON(obj, expanded = true) {
         // Add closing bracket line here
         html += '<div class="json-line">';
         html += '<span class="json-gutter"></span>';
-        html += '<span class="json-code">' + ' '.repeat(depth);
+        html += '<span class="json-code">' + '  '.repeat(depth);
         html += isArray ? ']' : '}';
         html += '</span></div>';
         
