@@ -9,7 +9,6 @@ Echo is a powerful Chrome DevTools extension for debugging and sharing network r
 
 ### 🎯 Advanced Request Capture
 - Capture all network requests with zero setup
-- Early request buffering (captures requests even before opening DevTools)
 - Smart domain detection and filtering
 - Request metadata including timing, size, and status
 
