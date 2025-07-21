@@ -33,12 +33,24 @@
             gap: 4px;
             flex-wrap: wrap;
             min-height: 32px;
+            overflow-x: auto;
+            overflow-y: hidden;
+            position: relative;
+            z-index: 1000;
         }
         
         .toolbar-section {
             display: flex;
             align-items: center;
             gap: 4px;
+            flex-shrink: 0;
+        }
+        
+        .filter-section {
+            display: flex;
+            align-items: center;
+            gap: 2px;
+            flex-shrink: 0;
         }
         
         .divider {
@@ -79,9 +91,8 @@
         }
         
         #filter-input {
-            flex: 1;
-            min-width: 200px;
-            padding: 2px 8px;
+            width: 100%;
+            padding: 2px 28px 2px 8px;
             background: #3c3c3c;
             border: 1px solid #3e3e42;
             border-radius: 2px;
@@ -95,16 +106,66 @@
             border-color: #0e639c;
         }
         
+        .filter-input-container {
+            position: relative;
+            flex: 1;
+            min-width: 150px;
+            max-width: 300px;
+            z-index: 1001;
+        }
+        
+        .search-hints {
+            position: fixed;
+            background: #2d2d30;
+            border: 1px solid #464647;
+            border-radius: 3px;
+            margin-top: 2px;
+            padding: 5px 0;
+            z-index: 999999;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+            max-height: 250px;
+            overflow-y: auto;
+            min-width: 280px;
+        }
+        
+        .hint-item {
+            padding: 6px 12px;
+            font-size: 11px;
+            color: #ccc;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .hint-item:hover {
+            background: #094771;
+            color: #fff;
+        }
+        
+        .hint-example {
+            color: #969696;
+            font-family: 'SF Mono', Monaco, monospace;
+            font-size: 10px;
+            flex-shrink: 0;
+        }
+        
+        .hint-item:hover .hint-example {
+            color: #ccc;
+        }
+        
         .filter-type {
-            padding: 2px 8px;
+            padding: 2px 6px;
             background: transparent;
             border: 1px solid #3e3e42;
             border-radius: 2px;
             color: #cccccc;
             cursor: pointer;
-            font-size: 11px;
-            height: 22px;
+            font-size: 10px;
+            height: 20px;
             transition: all 0.1s;
+            white-space: nowrap;
         }
         
         .filter-type:hover {
@@ -157,6 +218,8 @@
             display: flex;
             flex: 1;
             overflow: hidden;
+            position: relative;
+            z-index: 1;
         }
         
         #requests-list {
@@ -644,63 +707,196 @@
         
         .json-viewer {
             position: relative;
+            overflow: auto;
+            scroll-behavior: smooth;
+            min-height: 100px;
+        }
+        
+        .json-viewer pre {
+            margin: 0;
+            padding-top: 10px;
         }
         
         .json-viewer-toolbar {
             position: sticky;
             top: 0;
             background: #1e1e1e;
-            padding: 8px 0;
+            padding: 8px 12px;
             margin-bottom: 8px;
-            z-index: 10;
+            z-index: 100;
             display: flex;
-            justify-content: flex-end;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+        
+        .json-search-container {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex: 1;
+            min-width: 200px;
+            flex-wrap: wrap;
+            position: relative;
+            z-index: 101;
+        }
+        
+        .json-search-input {
+            flex: 1;
+            min-width: 150px;
+            max-width: 250px;
+            padding: 4px 28px 4px 8px;
+            background: #3c3c3c;
+            border: 1px solid #3e3e42;
+            border-radius: 3px;
+            color: #cccccc;
+            font-size: 11px;
+            height: 24px;
+        }
+        
+        .json-search-input::placeholder {
+            color: #858585;
+        }
+        
+        .json-search-input:focus {
+            outline: none;
+            border-color: #0e639c;
+            background: #424245;
+        }
+        
+        .json-search-mode {
+            display: flex;
+            background: #2d2d30;
+            border: 1px solid #3e3e42;
+            border-radius: 3px;
+            overflow: hidden;
+            height: 24px;
+            flex-shrink: 0;
+        }
+        
+        .json-search-mode button {
+            padding: 4px 8px;
+            background: transparent;
+            border: none;
+            color: #969696;
+            cursor: pointer;
+            font-size: 10px;
+            transition: all 0.2s;
+            border-right: 1px solid #3e3e42;
+            white-space: nowrap;
+        }
+        
+        .json-search-mode button:last-child {
+            border-right: none;
+        }
+        
+        .json-search-mode button:hover {
+            background: #3e3e42;
+            color: #cccccc;
+        }
+        
+        .json-search-mode button.active {
+            background: #0e639c;
+            color: white;
+        }
+        
+        .json-nav-buttons {
+            display: flex;
+            gap: 4px;
+            flex-shrink: 0;
+        }
+        
+        .json-nav-btn {
+            padding: 2px 6px;
+            background: #2d2d30;
+            border: 1px solid #3e3e42;
+            border-radius: 3px;
+            color: #cccccc;
+            cursor: pointer;
+            font-size: 14px;
+            line-height: 1;
+            width: 24px;
+            height: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s;
+        }
+        
+        .json-nav-btn:hover:not(:disabled) {
+            background: #3e3e42;
+            border-color: #4a4a4d;
+        }
+        
+        .json-nav-btn:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+        
+        .json-match-counter {
+            font-size: 10px;
+            color: #969696;
+            white-space: nowrap;
+            min-width: 40px;
+            text-align: center;
+            flex-shrink: 0;
+        }
+        
+        .json-line.hidden {
+            display: none;
+        }
+        
+        .json-highlight {
+            background: #f9c74f;
+            color: #000;
+            padding: 0 2px;
+            border-radius: 2px;
+        }
+        
+        .json-highlight.current {
+            background: #ff6b6b;
+            color: #fff;
+        }
+        
+        .json-viewer-wrapper {
+            position: relative;
+            display: flex;
+            flex-direction: column;
         }
         
         .copy-json-btn {
-            padding: 4px 12px;
-            background: #0e639c;
+            position: absolute;
+            right: 0;
+            top: 0;
+            margin: 0;
+            padding: 6px 14px;
+            background: rgba(14, 99, 156, 0.95);
+            backdrop-filter: blur(8px);
             border: none;
-            border-radius: 2px;
+            border-radius: 0 0 0 4px;
             color: white;
             cursor: pointer;
-            font-size: 10px;
-            opacity: 0.8;
-            transition: opacity 0.2s, background 0.2s;
+            font-size: 11px;
+            font-weight: 500;
+            transition: all 0.2s;
             line-height: 1;
-            min-width: 40px;
             text-align: center;
+            z-index: 20;
+            box-shadow: -2px 2px 4px rgba(0, 0, 0, 0.3);
         }
         
         .copy-json-btn:hover {
-            opacity: 1;
-            background: #1177bb;
+            background: rgba(17, 119, 187, 1);
+            box-shadow: -3px 3px 6px rgba(0, 0, 0, 0.4);
         }
         
         .copy-json-btn:active {
-            background: #0d5a8f;
+            background: rgba(13, 90, 143, 1);
+            box-shadow: -1px 1px 2px rgba(0, 0, 0, 0.3);
         }
         
         .copy-json-btn.copied {
-            background: #4ec9b0;
-            opacity: 1;
-        }
-        
-        .value-copied {
-            position: fixed;
-            background: #4ec9b0;
-            color: white;
-            padding: 4px 8px;
-            border-radius: 4px;
-            font-size: 11px;
-            pointer-events: none;
-            z-index: 1000;
-            animation: fadeOut 1s ease-in-out;
-        }
-        
-        @keyframes fadeOut {
-            0% { opacity: 1; transform: translateY(0); }
-            100% { opacity: 0; transform: translateY(-10px); }
+            background: rgba(78, 201, 176, 1);
         }
         
         .headers-table {
@@ -941,6 +1137,164 @@
         #close-settings:hover {
             background: rgba(255, 255, 255, 0.1) !important;
         }
+        
+        /* Responsive design for smaller screens */
+        @media (max-width: 1200px) {
+            .btn span {
+                display: none;
+            }
+            
+            .btn svg {
+                margin: 0;
+            }
+            
+            .filter-type {
+                padding: 2px 4px;
+                font-size: 9px;
+            }
+            
+            .filter-input-container {
+                max-width: 250px;
+            }
+        }
+        
+        @media (max-width: 900px) {
+            #header {
+                padding: 4px;
+                gap: 2px;
+            }
+            
+            .divider {
+                display: none;
+            }
+            
+            .filter-section {
+                order: 2;
+                width: 100%;
+                margin-top: 4px;
+            }
+            
+            .filter-input-container {
+                order: 1;
+                max-width: none;
+                width: 100%;
+            }
+            
+            .domain-tags {
+                order: 3;
+                width: 100%;
+                margin-top: 4px;
+            }
+            
+            .request-count {
+                order: 4;
+            }
+        }
+        
+        /* Help icon for search */
+        .search-help-icon {
+            position: absolute;
+            right: 8px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: #969696;
+            cursor: help;
+            font-size: 14px;
+            width: 16px;
+            height: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 50%;
+            transition: all 0.2s;
+        }
+        
+        .search-help-icon:hover {
+            background: #3e3e42;
+            color: #cccccc;
+        }
+        
+        /* JSON search help icon */
+        .json-search-help {
+            position: absolute;
+            right: 6px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: #969696;
+            cursor: help;
+            font-size: 12px;
+            width: 16px;
+            height: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 50%;
+            transition: all 0.2s;
+        }
+        
+        .json-search-help:hover {
+            background: #3e3e42;
+            color: #cccccc;
+        }
+        
+        /* JSON search hints */
+        .json-search-hints {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            background: #2d2d30;
+            border: 1px solid #464647;
+            border-radius: 3px;
+            margin-top: 2px;
+            padding: 8px 0;
+            z-index: 100000;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+            max-height: 250px;
+            overflow-y: auto;
+            min-width: 300px;
+            max-width: 400px;
+        }
+        
+        .json-hint-item {
+            padding: 6px 12px;
+            font-size: 11px;
+            color: #ccc;
+            cursor: default;
+        }
+        
+        .json-hint-item strong {
+            color: #9cdcfe;
+            font-family: 'SF Mono', Monaco, monospace;
+            font-size: 10px;
+        }
+        
+        .json-hint-divider {
+            height: 1px;
+            background: #3e3e42;
+            margin: 8px 0;
+        }
+        
+        /* Responsive adjustments for JSON search */
+        @media (max-width: 600px) {
+            .json-search-container {
+                width: 100%;
+            }
+            
+            .json-search-input {
+                max-width: none;
+            }
+            
+            .json-search-mode {
+                order: 2;
+                margin-top: 4px;
+            }
+            
+            .json-nav-buttons,
+            .json-match-counter {
+                order: 3;
+            }
+        }
     </style>
 </head>
 <body>
@@ -979,7 +1333,7 @@
                 <button class="btn" id="settings-btn" title="Settings">⚙️</button>
             </div>
             <div class="divider"></div>
-            <div class="toolbar-section">
+            <div class="filter-section">
                 <button class="filter-type active" data-type="all">All</button>
                 <button class="filter-type" data-type="xhr">XHR</button>
                 <button class="filter-type" data-type="js">JS</button>
@@ -991,7 +1345,40 @@
                 <button class="filter-type" data-type="slow" style="color: #ffa500;">Slow</button>
             </div>
             <div class="divider"></div>
-            <input type="text" id="filter-input" placeholder="Filter by URL, status, method, domain...">
+            <div class="filter-input-container">
+                <input type="text" id="filter-input" placeholder="Search requests..." title="Examples: method:POST, status:404, url:api, time:>1000">
+                <span class="search-help-icon" id="search-help-icon" title="Search help">?</span>
+                <div id="search-hints" class="search-hints" style="display: none;">
+                    <div class="hint-item" data-value="method:">
+                        <span>Filter by HTTP method</span>
+                        <span class="hint-example">method:POST</span>
+                    </div>
+                    <div class="hint-item" data-value="status:">
+                        <span>Filter by status code</span>
+                        <span class="hint-example">status:404</span>
+                    </div>
+                    <div class="hint-item" data-value="url:">
+                        <span>Filter by URL content</span>
+                        <span class="hint-example">url:api</span>
+                    </div>
+                    <div class="hint-item" data-value="domain:">
+                        <span>Filter by exact domain</span>
+                        <span class="hint-example">domain:example.com</span>
+                    </div>
+                    <div class="hint-item" data-value="time:>">
+                        <span>Response time greater than (ms)</span>
+                        <span class="hint-example">time:>1000</span>
+                    </div>
+                    <div class="hint-item" data-value="header:">
+                        <span>Has specific header</span>
+                        <span class="hint-example">header:authorization</span>
+                    </div>
+                    <div class="hint-item" data-value="response:">
+                        <span>Response body contains</span>
+                        <span class="hint-example">response:error</span>
+                    </div>
+                </div>
+            </div>
             <div class="domain-tags" id="domain-tags"></div>
             <span class="request-count" id="request-count" style="margin-left: auto;">0 requests</span>
         </div>

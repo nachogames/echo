@@ -12,7 +12,6 @@ if (typeof chrome === 'undefined' || !chrome.runtime) {
                 title: "Open in Echo Dashboard (local)",
                 contexts: ["all"]
             });
-            console.log('Context menu created successfully');
         } catch (error) {
             console.error('Error creating context menu:', error);
         }
@@ -28,7 +27,6 @@ if (typeof chrome !== 'undefined' && chrome.contextMenus) {
                 chrome.tabs.create({
                     url: chrome.runtime.getURL('dashboard.html')
                 });
-                console.log('Local dashboard opened');
             } catch (error) {
                 console.error('Error opening local dashboard:', error);
             }
@@ -80,14 +78,11 @@ if (typeof chrome !== 'undefined' && chrome.runtime) {
             sendResponse({success: true});
         } else if (request.type === 'copy-to-clipboard') {
             // Handle clipboard copy from earlier implementation
-            console.log('Background script received copy request, text length:', request.text?.length || 0);
             chrome.tabs.query({active: true, currentWindow: true}, (tabs) => {
                 if (tabs[0]) {
-                    console.log('Found active tab:', tabs[0].id);
                     chrome.scripting.executeScript({
                         target: {tabId: tabs[0].id},
                         func: async (text) => {
-                            console.log('Injected script running, text length:', text.length);
                             try {
                                 // Focus the window first to allow clipboard access
                                 window.focus();
@@ -101,7 +96,6 @@ if (typeof chrome !== 'undefined' && chrome.runtime) {
                                 await new Promise(resolve => setTimeout(resolve, 10));
                                 
                                 await navigator.clipboard.writeText(text);
-                                console.log('Clipboard write successful');
                                 return { success: true };
                             } catch (error) {
                                 console.error('Clipboard write failed:', error);
@@ -119,7 +113,6 @@ if (typeof chrome !== 'undefined' && chrome.runtime) {
                                     document.body.removeChild(textarea);
                                     
                                     if (success) {
-                                        console.log('Fallback copy successful');
                                         return { success: true };
                                     } else {
                                         return { success: false, error: 'Both clipboard API and execCommand failed' };
@@ -136,7 +129,6 @@ if (typeof chrome !== 'undefined' && chrome.runtime) {
                             console.error('Script injection error:', chrome.runtime.lastError);
                             sendResponse({success: false, error: chrome.runtime.lastError.message});
                         } else {
-                            console.log('Script execution results:', results);
                             const result = results && results[0] && results[0].result;
                             const success = result && result.success;
                             sendResponse({success: success, error: result?.error});
@@ -191,14 +183,10 @@ async function handleOpenDashboard(requestData) {
         };
         
         const jsonString = JSON.stringify(minimalData);
-        console.log('Original JSON length:', jsonString.length);
-        console.log('Response body length in original:', requestData.response.body?.length || 0);
         
         // Compress the data to fit in URL
         const compressed = await compressString(jsonString);
-        console.log('Compressed size:', compressed.length);
         const base64Data = btoa(String.fromCharCode(...new Uint8Array(compressed)));
-        console.log('Final base64 length:', base64Data.length);
         
         // For production, this would be your hosted dashboard URL
         // For local testing, the serve-dashboard.sh script will tell you which port to use
@@ -219,7 +207,6 @@ function handleOpenLocalDashboard(base64Data) {
         const dashboardUrl = chrome.runtime.getURL('dashboard.html') + '?data=' + encodeURIComponent(base64Data) + '&compressed=true';
         chrome.tabs.create({ url: dashboardUrl });
         
-        console.log('Local dashboard opened with data length:', base64Data.length);
     } catch (error) {
         console.error('Error opening local dashboard:', error);
     }

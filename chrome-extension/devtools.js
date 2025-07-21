@@ -19,7 +19,7 @@ chrome.devtools.network.onRequestFinished.addListener((request) => {
             const url = new URL(request.request.url);
             domain = url.hostname;
         } catch (e) {
-            console.error('Failed to parse URL:', request.request.url);
+            // Failed to parse URL
         }
         
         // Create request data (same format as panel.js)
@@ -44,7 +44,7 @@ chrome.devtools.network.onRequestFinished.addListener((request) => {
             bufferedRequests.shift();
         }
     } catch (error) {
-        console.error('Error buffering request:', error);
+        // Error buffering request
     }
 });
 
@@ -54,8 +54,6 @@ chrome.devtools.panels.create(
     "icons/icon16.png",
     "panel.html",
     function(panel) {
-        console.log("Echo panel created");
-        
         // When panel is shown, it can request buffered data
         panel.onShown.addListener((window) => {
             // Make buffered requests available to the panel

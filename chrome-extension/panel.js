@@ -11,6 +11,95 @@ let tooltipShowTimeout = null;
 const MAX_REQUESTS = 500;
 let clearOnReload = localStorage.getItem('echo-clear-on-reload') !== 'false'; // Default true
 let savedDomains = [];
+let currentJsonSearchQuery = ''; // Store JSON search query across tabs
+
+// Request Query Parser for advanced search functionality
+class RequestQueryParser {
+    constructor() {
+        this.fieldMappings = {
+            'method': (req, val) => req.method.toUpperCase() === val.toUpperCase(),
+            'status': (req, val) => String(req.status) === val,
+            'url': (req, val) => req.url.toLowerCase().includes(val.toLowerCase()),
+            'domain': (req, val) => req.domain.toLowerCase() === val.toLowerCase(),
+            'time': (req, val) => this.compareNumeric(req.time, val.substring(1), val.charAt(0)),
+            'size': (req, val) => this.compareNumeric(req.responseSize, val.substring(1), val.charAt(0)),
+            'header': (req, val) => this.hasHeader(req, val),
+            'response': (req, val) => req.responseBody && req.responseBody.toLowerCase().includes(val.toLowerCase())
+        };
+    }
+
+    parse(query) {
+        // Handle field:value syntax
+        const fieldMatch = query.match(/^(\w+):(.+)$/);
+        if (fieldMatch) {
+            const [, field, value] = fieldMatch;
+            return this.createFieldFilter(field, value);
+        }
+        
+        // Handle time/size with comparison operators
+        const comparisonMatch = query.match(/^(time|size)([><=]+)(\d+)$/);
+        if (comparisonMatch) {
+            const [, field, op, value] = comparisonMatch;
+            return this.createFieldFilter(field, op + value);
+        }
+        
+        // Fallback to current behavior (search all fields)
+        return (req) => this.searchAllFields(req, query);
+    }
+
+    createFieldFilter(field, value) {
+        const filterFn = this.fieldMappings[field];
+        if (!filterFn) {
+            // Unknown field, search in all fields
+            return (req) => this.searchAllFields(req, `${field}:${value}`);
+        }
+        return (req) => filterFn(req, value);
+    }
+
+    searchAllFields(req, query) {
+        const searchTerm = query.toLowerCase();
+        return req.url.toLowerCase().includes(searchTerm) ||
+               req.method.toLowerCase().includes(searchTerm) ||
+               String(req.status).includes(searchTerm) ||
+               req.domain.toLowerCase().includes(searchTerm);
+    }
+
+    compareNumeric(actual, expected, op) {
+        const actualNum = parseFloat(actual) || 0;
+        const expectedNum = parseFloat(expected);
+        if (isNaN(expectedNum)) return false;
+        
+        switch(op) {
+            case '>': return actualNum > expectedNum;
+            case '<': return actualNum < expectedNum;
+            case '>=': return actualNum >= expectedNum;
+            case '<=': return actualNum <= expectedNum;
+            case '=': 
+            case '==': return actualNum === expectedNum;
+            default: return actualNum > expectedNum; // Default to > for time:1000 syntax
+        }
+    }
+
+    hasHeader(req, headerName) {
+        const lowerHeaderName = headerName.toLowerCase();
+        // Check request headers
+        if (req.requestHeaders) {
+            if (req.requestHeaders.some(h => h.name.toLowerCase().includes(lowerHeaderName))) {
+                return true;
+            }
+        }
+        // Check response headers
+        if (req.responseHeaders) {
+            if (req.responseHeaders.some(h => h.name.toLowerCase().includes(lowerHeaderName))) {
+                return true;
+            }
+        }
+        return false;
+    }
+}
+
+// Initialize query parser
+const queryParser = new RequestQueryParser();
 
 // Load saved domains on startup
 async function loadSavedDomains() {
@@ -139,14 +228,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     
     // Apply active domain filter if loaded
     if (activeDomain) {
-        console.log('Restored active domain filter:', activeDomain);
         updateRequestsList();
     }
     
     // Check if there are buffered requests from devtools.js
     if (window.bufferedRequests && window.bufferedRequests.length > 0) {
-        console.log(`Loading ${window.bufferedRequests.length} buffered requests`);
-        
         // Process each buffered request
         window.bufferedRequests.forEach(bufferedRequest => {
             // Extract the raw request data
@@ -176,7 +262,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Set up function for future buffer updates
     window.updateWithBufferedRequests = function() {
         if (window.bufferedRequests && window.bufferedRequests.length > 0) {
-            console.log('Updating with new buffered requests');
             // Process any new buffered requests
             // This handles the case where panel is hidden and shown again
         }
@@ -275,11 +360,198 @@ document.addEventListener('DOMContentLoaded', async () => {
         });
     });
 
-    // Search filter
-    document.getElementById('filter-input').addEventListener('input', (e) => {
+    // Search filter with hints
+    const filterInput = document.getElementById('filter-input');
+    const searchHints = document.getElementById('search-hints');
+    const searchHelpIcon = document.getElementById('search-help-icon');
+    let selectedHintIndex = -1;
+    
+    filterInput.addEventListener('input', (e) => {
         searchFilter = e.target.value.toLowerCase();
         updateRequestsList();
+        
+        // Check if search syntax is valid
+        const isValidSyntax = checkSearchSyntax(searchFilter);
+        if (isValidSyntax) {
+            filterInput.style.borderColor = '#4ec9b0'; // Green for valid
+        } else {
+            filterInput.style.borderColor = ''; // Default
+        }
+        
+        // Show hints when input is empty or ends with a space
+        if (searchFilter === '' || searchFilter.endsWith(' ') || searchFilter.endsWith(':')) {
+            showSearchHints();
+            filterHints();
+        } else {
+            hideSearchHints();
+        }
     });
+    
+    // Show hints on focus if input is empty
+    filterInput.addEventListener('focus', (e) => {
+        if (filterInput.value === '' || filterInput.value.endsWith(':')) {
+            showSearchHints();
+            filterHints();
+        }
+    });
+    
+    // Keyboard navigation for hints
+    filterInput.addEventListener('keydown', (e) => {
+        const hints = searchHints.querySelectorAll('.hint-item:not([style*="display: none"])');
+        
+        if (hints.length === 0 || searchHints.style.display === 'none') {
+            return;
+        }
+        
+        switch(e.key) {
+            case 'ArrowDown':
+                e.preventDefault();
+                selectedHintIndex = Math.min(selectedHintIndex + 1, hints.length - 1);
+                updateHintSelection(hints);
+                break;
+                
+            case 'ArrowUp':
+                e.preventDefault();
+                selectedHintIndex = Math.max(selectedHintIndex - 1, -1);
+                updateHintSelection(hints);
+                break;
+                
+            case 'Enter':
+                if (selectedHintIndex >= 0 && hints[selectedHintIndex]) {
+                    e.preventDefault();
+                    hints[selectedHintIndex].click();
+                }
+                break;
+                
+            case 'Escape':
+                hideSearchHints();
+                break;
+        }
+    });
+    
+    // Help icon click
+    if (searchHelpIcon) {
+        searchHelpIcon.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (searchHints.style.display === 'none' || searchHints.style.display === '') {
+                showSearchHints();
+                filterHints();
+                filterInput.focus();
+            } else {
+                hideSearchHints();
+            }
+        });
+    }
+    
+    // Hide hints when clicking outside
+    document.addEventListener('click', (e) => {
+        if (!filterInput.contains(e.target) && 
+            !searchHints.contains(e.target) && 
+            !searchHelpIcon.contains(e.target)) {
+            hideSearchHints();
+        }
+    });
+    
+    // Update position on scroll
+    let scrollTimeout;
+    window.addEventListener('scroll', () => {
+        if (searchHints.style.display !== 'none') {
+            clearTimeout(scrollTimeout);
+            scrollTimeout = setTimeout(() => {
+                const inputRect = filterInput.getBoundingClientRect();
+                searchHints.style.top = `${inputRect.bottom + 2}px`;
+                searchHints.style.left = `${inputRect.left}px`;
+            }, 10);
+        }
+    }, true);
+    
+    // Handle hint item clicks
+    searchHints.querySelectorAll('.hint-item').forEach(hint => {
+        hint.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const value = hint.getAttribute('data-value');
+            filterInput.value = value;
+            filterInput.focus();
+            hideSearchHints();
+            // Move cursor to end
+            filterInput.setSelectionRange(filterInput.value.length, filterInput.value.length);
+            // Trigger input event to update search
+            filterInput.dispatchEvent(new Event('input'));
+        });
+    });
+    
+    function showSearchHints() {
+        searchHints.style.display = 'block';
+        selectedHintIndex = -1;
+        
+        // Position the fixed hints below the input
+        const inputRect = filterInput.getBoundingClientRect();
+        searchHints.style.top = `${inputRect.bottom + 2}px`;
+        searchHints.style.left = `${inputRect.left}px`;
+        searchHints.style.width = `${Math.max(280, inputRect.width)}px`;
+        
+        // Ensure hints are visible within viewport
+        const hintsRect = searchHints.getBoundingClientRect();
+        const viewportHeight = window.innerHeight;
+        if (hintsRect.bottom > viewportHeight) {
+            searchHints.style.maxHeight = `${viewportHeight - hintsRect.top - 10}px`;
+        }
+    }
+    
+    function hideSearchHints() {
+        searchHints.style.display = 'none';
+        selectedHintIndex = -1;
+        // Remove selection styling
+        searchHints.querySelectorAll('.hint-item').forEach(hint => {
+            hint.style.background = '';
+        });
+    }
+    
+    function filterHints() {
+        const currentValue = filterInput.value.toLowerCase();
+        const hints = searchHints.querySelectorAll('.hint-item');
+        
+        hints.forEach(hint => {
+            const hintValue = hint.getAttribute('data-value').toLowerCase();
+            const hintText = hint.textContent.toLowerCase();
+            
+            // Show hint if current input is empty, or if it matches the beginning of the hint
+            if (currentValue === '' || 
+                hintValue.startsWith(currentValue) || 
+                currentValue.endsWith(' ') ||
+                currentValue.endsWith(':')) {
+                hint.style.display = '';
+            } else {
+                hint.style.display = 'none';
+            }
+        });
+    }
+    
+    function updateHintSelection(hints) {
+        // Clear all selections
+        hints.forEach((hint, index) => {
+            if (index === selectedHintIndex) {
+                hint.style.background = '#094771';
+                hint.scrollIntoView({ block: 'nearest' });
+            } else {
+                hint.style.background = '';
+            }
+        });
+    }
+    
+    function checkSearchSyntax(query) {
+        if (!query || query.trim() === '') return false;
+        
+        // Check for valid field:value syntax
+        const fieldPattern = /^(method|status|url|domain|header|response|time|size):[^\s]+$/i;
+        if (fieldPattern.test(query)) return true;
+        
+        // Check for comparison operators
+        const comparisonPattern = /^(time|size)[><=]+\d+$/i;
+        if (comparisonPattern.test(query)) return true;
+        
+        return false;
+    }
 
     // Details panel close button
     document.getElementById('close-details').addEventListener('click', hideDetailsPanel);
@@ -459,7 +731,6 @@ function processNetworkRequest(request, fromBuffer = false) {
             if (content) {
                 // Don't truncate response body - let compression handle large data
                 requestData.responseBody = content;
-                console.log('Response body length:', content.length);
             }
             
             requests.push(requestData);
@@ -588,7 +859,6 @@ function updateRequestsListNow() {
     if (isUpdatingRequestsList) return;
     isUpdatingRequestsList = true;
     
-    console.log('updateRequestsListNow called, requests count:', requests.length);
     const listContainer = document.getElementById('requests-body');
     
     let filteredRequests = requests;
@@ -609,14 +879,10 @@ function updateRequestsListNow() {
         filteredRequests = filteredRequests.filter(req => req.domain === activeDomain);
     }
     
-    // Apply search filter
+    // Apply search filter using query parser
     if (searchFilter) {
-        filteredRequests = filteredRequests.filter(req => {
-            return req.url.toLowerCase().includes(searchFilter) ||
-                   req.method.toLowerCase().includes(searchFilter) ||
-                   req.status.toString().includes(searchFilter) ||
-                   req.domain.toLowerCase().includes(searchFilter);
-        });
+        const filterFn = queryParser.parse(searchFilter);
+        filteredRequests = filteredRequests.filter(filterFn);
     }
     
     document.getElementById('request-count').textContent = `${filteredRequests.length} requests`;
@@ -678,18 +944,7 @@ function updateRequestsListNow() {
         }
     });
     
-    // Add hint about right-clicking
-    if (filteredRequests.length > 0 && document.querySelectorAll('.request-item').length > 0) {
-        const hint = document.getElementById('context-menu-hint');
-        if (!hint) {
-            const hintDiv = document.createElement('div');
-            hintDiv.id = 'context-menu-hint';
-            hintDiv.style.cssText = 'position: fixed; bottom: 10px; right: 10px; background: #094771; color: white; padding: 8px 12px; border-radius: 4px; font-size: 11px; opacity: 0.9; z-index: 500;';
-            hintDiv.textContent = 'Right-click on any request for more options';
-            document.body.appendChild(hintDiv);
-            setTimeout(() => hintDiv.remove(), 5000);
-        }
-    }
+    // Removed the right-click hint that kept appearing
     
     // Reset the updating flag
     isUpdatingRequestsList = false;
@@ -1280,6 +1535,424 @@ function showRequestDetails(request) {
     }
 }
 
+// Add JSON search functionality
+function addJsonSearch(container, jsonData) {
+    const toolbar = container.querySelector('.json-viewer-toolbar');
+    const jsonViewer = container.querySelector('.json-viewer');
+    
+    if (!toolbar || !jsonViewer) return;
+    
+    // Create search UI elements
+    const searchContainer = document.createElement('div');
+    searchContainer.className = 'json-search-container';
+    
+    searchContainer.innerHTML = `
+        <div style="position: relative; flex: 1; min-width: 150px; max-width: 250px; z-index: 102;">
+            <input type="text" class="json-search-input" placeholder="Search..." title="Search for keys, values, or use multiple terms">
+            <span class="json-search-help" title="Search help">?</span>
+            <div class="json-search-hints" style="display: none;">
+                <div class="json-hint-item">
+                    <strong>Basic Search:</strong> Type any text to search keys and values<br>
+                    Example: <strong>id</strong> finds all "id" keys and values
+                </div>
+                <div class="json-hint-item">
+                    <strong>Multiple Terms (OR):</strong> Space-separated terms<br>
+                    Examples:<br>
+                    • <strong>user email</strong> - finds lines with "user" OR "email"<br>
+                    • <strong>error status code</strong> - finds any of these terms<br>
+                    • <strong>bearer token auth</strong> - finds authentication-related fields
+                </div>
+                <div class="json-hint-divider"></div>
+                <div class="json-hint-item">
+                    <strong>Search Examples:</strong><br>
+                    • <strong>true false</strong> - find all boolean values<br>
+                    • <strong>null undefined</strong> - find empty values<br>
+                    • <strong>http https</strong> - find all URLs<br>
+                    • <strong>@ .</strong> - find emails (contains @ and .)
+                </div>
+                <div class="json-hint-divider"></div>
+                <div class="json-hint-item">
+                    <strong>Filter Mode:</strong> Shows only matching lines and their parents<br>
+                    Great for focusing on specific data
+                </div>
+                <div class="json-hint-item">
+                    <strong>Highlight Mode:</strong> Highlights all matches in yellow<br>
+                    Use ↑↓ arrows to jump between matches
+                </div>
+                <div class="json-hint-divider"></div>
+                <div class="json-hint-item">
+                    <strong>Tips:</strong><br>
+                    • Search is case-insensitive<br>
+                    • Click any value to copy it instantly<br>
+                    • Filter mode preserves JSON structure<br>
+                    • Works on both keys and values
+                </div>
+            </div>
+        </div>
+        <div class="json-search-mode">
+            <button class="filter-mode active" data-mode="filter">Filter</button>
+            <button class="highlight-mode" data-mode="highlight">Highlight</button>
+        </div>
+        <div class="json-nav-buttons" style="display: none;">
+            <button class="json-nav-btn prev" title="Previous match">↑</button>
+            <button class="json-nav-btn next" title="Next match">↓</button>
+        </div>
+        <span class="json-match-counter"></span>
+    `;
+    
+    // Add search container to toolbar
+    toolbar.appendChild(searchContainer);
+    
+    const searchInput = searchContainer.querySelector('.json-search-input');
+    const filterBtn = searchContainer.querySelector('.filter-mode');
+    const highlightBtn = searchContainer.querySelector('.highlight-mode');
+    const navButtons = searchContainer.querySelector('.json-nav-buttons');
+    const prevBtn = searchContainer.querySelector('.prev');
+    const nextBtn = searchContainer.querySelector('.next');
+    const matchCounter = searchContainer.querySelector('.json-match-counter');
+    const jsonSearchHelp = searchContainer.querySelector('.json-search-help');
+    const jsonSearchHints = searchContainer.querySelector('.json-search-hints');
+    
+    let searchMode = 'filter';
+    let matches = [];
+    let currentMatchIndex = -1;
+    let searchTimeout = null;
+    
+    // Mode toggle handlers
+    filterBtn.addEventListener('click', () => {
+        searchMode = 'filter';
+        filterBtn.classList.add('active');
+        highlightBtn.classList.remove('active');
+        navButtons.style.display = 'none';
+        performSearch();
+    });
+    
+    highlightBtn.addEventListener('click', () => {
+        searchMode = 'highlight';
+        highlightBtn.classList.add('active');
+        filterBtn.classList.remove('active');
+        navButtons.style.display = 'flex';
+        performSearch();
+    });
+    
+    // Search input handler
+    searchInput.addEventListener('input', () => {
+        currentJsonSearchQuery = searchInput.value; // Store the query
+        clearTimeout(searchTimeout);
+        searchTimeout = setTimeout(performSearch, 300);
+    });
+    
+    // Help icon handlers
+    if (jsonSearchHelp && jsonSearchHints) {
+        jsonSearchHelp.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const isVisible = jsonSearchHints.style.display !== 'none';
+            jsonSearchHints.style.display = isVisible ? 'none' : 'block';
+            if (!isVisible) {
+                searchInput.focus();
+            }
+        });
+        
+        // Hide hints when clicking outside
+        document.addEventListener('click', (e) => {
+            if (!jsonSearchHelp.contains(e.target) && 
+                !jsonSearchHints.contains(e.target) &&
+                !searchInput.contains(e.target)) {
+                jsonSearchHints.style.display = 'none';
+            }
+        });
+        
+        // Hide hints on blur (removed auto-show on focus)
+        searchInput.addEventListener('blur', () => {
+            // Delay to allow clicking on hints or help icon
+            setTimeout(() => {
+                if (!jsonSearchHelp.contains(document.activeElement) && 
+                    !jsonSearchHints.contains(document.activeElement)) {
+                    jsonSearchHints.style.display = 'none';
+                }
+            }, 200);
+        });
+    }
+    
+    // Navigation handlers
+    prevBtn.addEventListener('click', () => navigateMatch(-1));
+    nextBtn.addEventListener('click', () => navigateMatch(1));
+    
+    // Keyboard navigation
+    searchInput.addEventListener('keydown', (e) => {
+        if (searchMode === 'highlight') {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                navigateMatch(e.shiftKey ? -1 : 1);
+            }
+        }
+    });
+    
+    function performSearch() {
+        const query = searchInput.value.toLowerCase().trim();
+        
+        // Clear previous highlights
+        jsonViewer.querySelectorAll('.json-highlight').forEach(el => {
+            const textNode = document.createTextNode(el.textContent);
+            el.parentNode.replaceChild(textNode, el);
+        });
+        
+        // Reset hidden state
+        jsonViewer.querySelectorAll('.json-line.hidden').forEach(el => {
+            el.classList.remove('hidden');
+        });
+        
+        matches = [];
+        currentMatchIndex = -1;
+        
+        if (!query) {
+            updateMatchCounter();
+            return;
+        }
+        
+        // Parse multiple search terms (space-separated)
+        const searchTerms = query.split(/\s+/).filter(term => term.length > 0);
+        
+        if (searchMode === 'filter') {
+            performFilterSearch(searchTerms);
+        } else {
+            performHighlightSearch(searchTerms);
+        }
+        
+        updateMatchCounter();
+    }
+    
+    function performFilterSearch(searchTerms) {
+        const jsonLines = jsonViewer.querySelectorAll('.json-line');
+        const matchingLines = new Set();
+        const ancestorLines = new Set();
+        
+        // First pass: find all matching lines (must match ANY search term)
+        jsonLines.forEach((line) => {
+            const text = line.textContent.toLowerCase();
+            const hasMatch = searchTerms.some(term => text.includes(term));
+            
+            if (hasMatch) {
+                matchingLines.add(line);
+                matches.push(line);
+                
+                // Mark all ancestor lines that need to stay visible
+                let parent = line.parentElement;
+                while (parent && parent !== jsonViewer) {
+                    // Check all ancestor elements for json-line
+                    const ancestorJsonLines = parent.querySelectorAll('.json-line');
+                    ancestorJsonLines.forEach(ancestorLine => {
+                        if (line !== ancestorLine && !line.contains(ancestorLine)) {
+                            ancestorLines.add(ancestorLine);
+                        }
+                    });
+                    parent = parent.parentElement;
+                }
+            }
+        });
+        
+        // Second pass: hide non-matching lines
+        jsonLines.forEach(line => {
+            if (!matchingLines.has(line)) {
+                // Check if this line is an ancestor of a match
+                const isAncestor = Array.from(matchingLines).some(matchLine => 
+                    line.contains(matchLine) && line !== matchLine
+                );
+                
+                if (!isAncestor) {
+                    line.classList.add('hidden');
+                }
+            }
+        });
+        
+        // Ensure all matching lines' containers are visible
+        matchingLines.forEach(line => {
+            let parent = line.parentElement;
+            while (parent && parent !== jsonViewer) {
+                if (parent.id && parent.style.display === 'none') {
+                    // This is a collapsed section - expand it
+                    const toggleId = 'toggle_' + parent.id;
+                    const toggle = jsonViewer.querySelector(`[id="${toggleId}"]`);
+                    if (toggle && toggle.textContent === '▶') {
+                        toggle.textContent = '▼';
+                        parent.style.display = 'block';
+                    }
+                }
+                parent = parent.parentElement;
+            }
+        });
+    }
+    
+    function performHighlightSearch(searchTerms) {
+        const textNodes = getTextNodes(jsonViewer);
+        
+        textNodes.forEach(node => {
+            const text = node.textContent;
+            // Create regex that matches any of the search terms
+            const regexPattern = searchTerms.map(term => escapeRegex(term)).join('|');
+            const regex = new RegExp(`(${regexPattern})`, 'gi');
+            const matches_in_node = [];
+            
+            let match;
+            while ((match = regex.exec(text)) !== null) {
+                matches_in_node.push({
+                    start: match.index,
+                    end: match.index + match[0].length,
+                    text: match[0]
+                });
+            }
+            
+            if (matches_in_node.length > 0) {
+                const parent = node.parentNode;
+                const fragment = document.createDocumentFragment();
+                let lastIndex = 0;
+                
+                matches_in_node.forEach(matchInfo => {
+                    // Add text before match
+                    if (matchInfo.start > lastIndex) {
+                        fragment.appendChild(
+                            document.createTextNode(text.substring(lastIndex, matchInfo.start))
+                        );
+                    }
+                    
+                    // Add highlighted match
+                    const span = document.createElement('span');
+                    span.className = 'json-highlight';
+                    span.textContent = matchInfo.text;
+                    fragment.appendChild(span);
+                    matches.push(span);
+                    
+                    lastIndex = matchInfo.end;
+                });
+                
+                // Add remaining text
+                if (lastIndex < text.length) {
+                    fragment.appendChild(
+                        document.createTextNode(text.substring(lastIndex))
+                    );
+                }
+                
+                // Replace the original text node
+                parent.replaceChild(fragment, node);
+            }
+        });
+        
+        // Navigate to first match
+        if (matches.length > 0) {
+            currentMatchIndex = 0;
+            highlightCurrentMatch();
+        }
+    }
+    
+    function getTextNodes(element) {
+        const textNodes = [];
+        const walker = document.createTreeWalker(
+            element,
+            NodeFilter.SHOW_TEXT,
+            {
+                acceptNode: function(node) {
+                    // Skip whitespace-only nodes and nodes inside buttons
+                    if (node.textContent.trim() && 
+                        !node.parentElement.classList.contains('json-toggle') &&
+                        !node.parentElement.classList.contains('json-gutter')) {
+                        return NodeFilter.FILTER_ACCEPT;
+                    }
+                    return NodeFilter.FILTER_REJECT;
+                }
+            }
+        );
+        
+        let node;
+        while (node = walker.nextNode()) {
+            textNodes.push(node);
+        }
+        return textNodes;
+    }
+    
+    function navigateMatch(direction) {
+        if (matches.length === 0) return;
+        
+        currentMatchIndex += direction;
+        if (currentMatchIndex < 0) currentMatchIndex = matches.length - 1;
+        if (currentMatchIndex >= matches.length) currentMatchIndex = 0;
+        
+        highlightCurrentMatch();
+    }
+    
+    function highlightCurrentMatch() {
+        matches.forEach((match, index) => {
+            match.classList.toggle('current', index === currentMatchIndex);
+        });
+        
+        if (matches[currentMatchIndex]) {
+            // Expand any collapsed parents
+            let parent = matches[currentMatchIndex].parentElement;
+            while (parent && parent !== jsonViewer) {
+                if (parent.style.display === 'none') {
+                    // Find the toggle button for this section
+                    const parentLine = parent.previousElementSibling;
+                    if (parentLine) {
+                        const toggle = parentLine.querySelector('.json-toggle');
+                        if (toggle && toggle.textContent === '▶') {
+                            toggle.click();
+                        }
+                    }
+                }
+                parent = parent.parentElement;
+            }
+            
+            // Scroll to match
+            matches[currentMatchIndex].scrollIntoView({
+                behavior: 'smooth',
+                block: 'center'
+            });
+        }
+        
+        updateMatchCounter();
+    }
+    
+    function updateMatchCounter() {
+        if (searchMode === 'filter') {
+            matchCounter.textContent = matches.length > 0 ? `${matches.length} matches` : '';
+        } else {
+            if (matches.length > 0) {
+                matchCounter.textContent = `${currentMatchIndex + 1}/${matches.length}`;
+                prevBtn.disabled = matches.length === 0;
+                nextBtn.disabled = matches.length === 0;
+            } else {
+                matchCounter.textContent = '';
+                prevBtn.disabled = true;
+                nextBtn.disabled = true;
+            }
+        }
+    }
+    
+    function escapeRegex(str) {
+        return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    }
+    
+    // Removed auto-focus to prevent hints from showing automatically
+    
+    // Restore previous search query if exists
+    if (currentJsonSearchQuery) {
+        searchInput.value = currentJsonSearchQuery;
+        // Perform search immediately with restored query
+        performSearch();
+    }
+    
+    // Update placeholder on resize
+    function updatePlaceholder() {
+        if (searchContainer.offsetWidth < 400) {
+            searchInput.placeholder = 'Search...';
+        } else {
+            searchInput.placeholder = 'Search keys/values...';
+        }
+    }
+    
+    updatePlaceholder();
+    window.addEventListener('resize', updatePlaceholder);
+}
+
 // Show headers tab
 function showHeadersTab(request, container) {
     try {
@@ -1314,14 +1987,12 @@ function showHeadersTab(request, container) {
         const headersJson = JSON.stringify(headersData, null, 2);
         
         container.innerHTML = `
-            <div class="json-viewer-toolbar">
-                <button class="copy-json-btn">Copy</button>
-            </div>
-            <div class="json-viewer">
-                <pre>${jsonHtml}</pre>
-            </div>
-            <div style="margin-top: 20px; padding: 10px; background: #2d2d30; border-radius: 4px; font-size: 11px; color: #969696;">
-                Tip: Click on any value to copy it to clipboard. Right-click on a request for more options.
+            <div class="json-viewer-toolbar"></div>
+            <div class="json-viewer-wrapper">
+                ${createCopyButton()}
+                <div class="json-viewer">
+                    <pre>${jsonHtml}</pre>
+                </div>
             </div>
         `;
         
@@ -1330,6 +2001,9 @@ function showHeadersTab(request, container) {
         if (copyBtn) {
             copyBtn.addEventListener('click', () => copyToClipboard(headersJson));
         }
+        
+        // Add search functionality
+        addJsonSearch(container, headersData);
         
         addJsonClickHandlers(container, headersData);
     } catch (error) {
@@ -1348,11 +2022,12 @@ function showPayloadTab(request, container) {
             const queryParamsJson = JSON.stringify(request.queryParams, null, 2);
             container.innerHTML = `
                 <h3 style="margin: 0 0 10px 0; color: #ddd; font-size: 12px;">Query Parameters</h3>
-                <div class="json-viewer-toolbar">
-                    <button class="copy-json-btn">Copy</button>
-                </div>
-                <div class="json-viewer">
-                    <pre>${jsonHtml}</pre>
+                <div class="json-viewer-toolbar"></div>
+                <div class="json-viewer-wrapper">
+                    ${createCopyButton()}
+                    <div class="json-viewer">
+                        <pre>${jsonHtml}</pre>
+                    </div>
                 </div>
             `;
             
@@ -1361,6 +2036,9 @@ function showPayloadTab(request, container) {
             if (copyBtn) {
                 copyBtn.addEventListener('click', () => copyToClipboard(queryParamsJson));
             }
+            
+            // Add search functionality
+            addJsonSearch(container, request.queryParams);
             
             addJsonClickHandlers(container, request.queryParams);
         } catch (error) {
@@ -1376,28 +2054,36 @@ function showPayloadTab(request, container) {
             const parsed = JSON.parse(request.requestBody);
             const jsonHtml = syntaxHighlightJSON(parsed);
             container.innerHTML = `
-                <div class="json-viewer-toolbar">
-                    <button class="copy-json-btn">Copy</button>
-                </div>
-                <div class="json-viewer">
-                    <pre>${jsonHtml}</pre>
+                <div class="json-viewer-toolbar"></div>
+                <div class="json-viewer-wrapper">
+                    ${createCopyButton()}
+                    <div class="json-viewer">
+                        <pre>${jsonHtml}</pre>
+                    </div>
                 </div>
             `;
             
             // Add copy button handler
             const copyBtn = container.querySelector('.copy-json-btn');
             if (copyBtn) {
-                copyBtn.addEventListener('click', () => copyToClipboard(request.requestBody));
+                copyBtn.addEventListener('click', () => {
+                    // Pretty print JSON for copy
+                    copyToClipboard(JSON.stringify(parsed, null, 2));
+                });
             }
+            
+            // Add search functionality
+            addJsonSearch(container, parsed);
             
             addJsonClickHandlers(container, parsed);
         } catch {
             container.innerHTML = `
-                <div class="json-viewer-toolbar">
-                    <button class="copy-json-btn">Copy</button>
-                </div>
-                <div class="json-viewer">
-                    <pre>${escapeHtml(request.requestBody)}</pre>
+                <div class="json-viewer-toolbar"></div>
+                <div class="json-viewer-wrapper">
+                    ${createCopyButton()}
+                    <div class="json-viewer">
+                        <pre>${escapeHtml(request.requestBody)}</pre>
+                    </div>
                 </div>
             `;
             
@@ -1421,28 +2107,36 @@ function showResponseTab(request, container) {
         const parsed = JSON.parse(request.responseBody);
         const jsonHtml = syntaxHighlightJSON(parsed);
         container.innerHTML = `
-            <div class="json-viewer-toolbar">
-                <button class="copy-json-btn">Copy</button>
-            </div>
-            <div class="json-viewer">
-                <pre>${jsonHtml}</pre>
+            <div class="json-viewer-toolbar"></div>
+            <div class="json-viewer-wrapper">
+                ${createCopyButton()}
+                <div class="json-viewer">
+                    <pre>${jsonHtml}</pre>
+                </div>
             </div>
         `;
         
         // Add copy button handler
         const copyBtn = container.querySelector('.copy-json-btn');
         if (copyBtn) {
-            copyBtn.addEventListener('click', () => copyToClipboard(request.responseBody));
+            copyBtn.addEventListener('click', () => {
+                // Pretty print JSON for copy
+                copyToClipboard(JSON.stringify(parsed, null, 2));
+            });
         }
+        
+        // Add search functionality
+        addJsonSearch(container, parsed);
         
         addJsonClickHandlers(container, parsed);
     } catch {
         container.innerHTML = `
-            <div class="json-viewer-toolbar">
-                <button class="copy-json-btn">Copy</button>
-            </div>
-            <div class="json-viewer">
-                <pre>${escapeHtml(request.responseBody)}</pre>
+            <div class="json-viewer-toolbar"></div>
+            <div class="json-viewer-wrapper">
+                ${createCopyButton()}
+                <div class="json-viewer">
+                    <pre>${escapeHtml(request.responseBody)}</pre>
+                </div>
             </div>
         `;
         
@@ -1458,11 +2152,12 @@ function showResponseTab(request, container) {
 function showCurlTab(request, container) {
     const curl = generateCurl(request);
     container.innerHTML = `
-        <div class="json-viewer-toolbar">
-            <button class="copy-json-btn">Copy</button>
-        </div>
-        <div class="json-viewer">
-            <pre>${escapeHtml(curl)}</pre>
+        <div class="json-viewer-toolbar"></div>
+        <div class="json-viewer-wrapper">
+            ${createCopyButton()}
+            <div class="json-viewer">
+                <pre>${escapeHtml(curl)}</pre>
+            </div>
         </div>
     `;
     
@@ -1479,7 +2174,7 @@ function addJsonClickHandlers(container, obj) {
         elem.addEventListener('click', (e) => {
             e.stopPropagation();
             const value = elem.textContent.replace(/^"|"$/g, '').replace(/:$/, '');
-            copyToClipboard(value, elem);
+            copyToClipboard(value);
         });
     });
 }
@@ -1547,10 +2242,14 @@ function sendRuntimeMessage(message) {
     }
 }
 
+// Create a copy button HTML
+function createCopyButton() {
+    return '<button class="copy-json-btn">Copy</button>';
+}
+
 // Copy to clipboard with error handling
-function copyToClipboard(text, element) {
+function copyToClipboard(text) {
     // DevTools context doesn't have clipboard permissions, so always use background script
-    console.log('Attempting to copy text:', text.substring(0, 100) + '...');
     sendRuntimeMessage({
         type: 'copy-to-clipboard',
         text: text
@@ -2034,8 +2733,6 @@ async function compressString(str) {
 // Open local dashboard with current requests
 async function openLocalDashboard() {
     try {
-        console.log('Starting dashboard data preparation...', requests.length, 'requests');
-        
         if (requests.length === 0) {
             showToast('No requests to display', 'info');
             return;
@@ -2045,7 +2742,6 @@ async function openLocalDashboard() {
         const dashboardData = [];
         for (let i = 0; i < requests.length; i++) {
             try {
-                console.log(`Processing request ${i + 1}/${requests.length}...`);
                 const formatted = generateDashboardFormat(requests[i]);
                 dashboardData.push(formatted);
             } catch (error) {
@@ -2059,8 +2755,6 @@ async function openLocalDashboard() {
             showToast('No valid requests to display', 'error');
             return;
         }
-        
-        console.log('Successfully processed', dashboardData.length, 'requests');
         
         // Show progress for serialization
         showToast('Serializing data...', 'info', 1000);
@@ -2086,13 +2780,10 @@ async function openLocalDashboard() {
                 
                 return value;
             });
-            console.log('Original JSON length:', jsonString.length, 'characters');
-            console.log('Original JSON size:', Math.round(jsonString.length / 1024), 'KB');
         } catch (error) {
             console.error('JSON stringify error:', error);
             // Fallback: try with a simpler, more limited approach
             try {
-                console.log('Attempting fallback serialization with data limits...');
                 jsonString = JSON.stringify(dashboardData.map(req => ({
                     request: {
                         url: String(req.request?.url || '').substring(0, 2000),
@@ -2113,7 +2804,6 @@ async function openLocalDashboard() {
                     },
                     curl: req.curl ? String(req.curl).substring(0, 50000) : ''
                 })));
-                console.log('Fallback serialization successful, length:', jsonString.length);
             } catch (fallbackError) {
                 console.error('Fallback serialization also failed:', fallbackError);
                 throw new Error('Failed to serialize dashboard data - data contains circular references or is too complex');
@@ -2125,11 +2815,8 @@ async function openLocalDashboard() {
         
         // Use native CompressionStream for compression
         const compressed = await compressString(jsonString);
-        console.log('Compressed size:', compressed.length, 'bytes');
-        console.log('Compression ratio:', Math.round((1 - compressed.length / jsonString.length) * 100) + '%');
         
         const base64Data = btoa(String.fromCharCode(...new Uint8Array(compressed)));
-        console.log('Final base64 length:', base64Data.length, 'characters');
         
         // Send message to background script to open the dashboard
         const response = await sendRuntimeMessage({

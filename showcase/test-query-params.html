@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Query Parameters</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+        }
+        button {
+            padding: 10px 20px;
+            margin: 5px;
+            border: none;
+            background: #007bff;
+            color: white;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+        pre {
+            background: #f4f4f4;
+            padding: 10px;
+            border-radius: 4px;
+            overflow-x: auto;
+        }
+        #response {
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Test GET Request Query Parameters</h1>
+    
+    <p>Click the buttons below to make GET requests with query parameters. Open Chrome DevTools Echo panel to see how query parameters are displayed in the Payload tab.</p>
+    
+    <button onclick="testSimpleParams()">Simple Query Params</button>
+    <button onclick="testComplexParams()">Complex Query Params</button>
+    <button onclick="testArrayParams()">Array Query Params</button>
+    <button onclick="testNestedParams()">Nested Query Params</button>
+    <button onclick="testNoParams()">No Query Params</button>
+    
+    <div id="response"></div>
+    
+    <script>
+        const responseDiv = document.getElementById('response');
+        
+        function testSimpleParams() {
+            const url = 'https://jsonplaceholder.typicode.com/posts?userId=1&id=2';
+            fetch(url)
+                .then(response => response.json())
+                .then(data => {
+                    responseDiv.innerHTML = `
+                        <h3>Simple Query Parameters</h3>
+                        <p><strong>URL:</strong> ${url}</p>
+                        <p><strong>Query Params:</strong> userId=1, id=2</p>
+                        <pre>${JSON.stringify(data, null, 2)}</pre>
+                    `;
+                });
+        }
+        
+        function testComplexParams() {
+            const url = 'https://jsonplaceholder.typicode.com/posts?' + 
+                      'title=Test%20Title&body=Test%20Body%20with%20spaces&userId=123&published=true';
+            fetch(url)
+                .then(response => response.json())
+                .then(data => {
+                    responseDiv.innerHTML = `
+                        <h3>Complex Query Parameters</h3>
+                        <p><strong>URL:</strong> ${url}</p>
+                        <p><strong>Query Params:</strong> title, body (with spaces), userId, published</p>
+                        <pre>${JSON.stringify(data, null, 2)}</pre>
+                    `;
+                });
+        }
+        
+        function testArrayParams() {
+            const url = 'https://jsonplaceholder.typicode.com/posts?id=1&id=2&id=3&tags=javascript&tags=web';
+            fetch(url)
+                .then(response => response.json())
+                .then(data => {
+                    responseDiv.innerHTML = `
+                        <h3>Array Query Parameters</h3>
+                        <p><strong>URL:</strong> ${url}</p>
+                        <p><strong>Query Params:</strong> Multiple id values, multiple tags</p>
+                        <pre>${JSON.stringify(data, null, 2)}</pre>
+                    `;
+                });
+        }
+        
+        function testNestedParams() {
+            const url = 'https://jsonplaceholder.typicode.com/posts?' + 
+                      'filter[status]=published&filter[author]=john&sort=-date&page=1&limit=10';
+            fetch(url)
+                .then(response => response.json())
+                .then(data => {
+                    responseDiv.innerHTML = `
+                        <h3>Nested Query Parameters</h3>
+                        <p><strong>URL:</strong> ${url}</p>
+                        <p><strong>Query Params:</strong> filter[status], filter[author], sort, page, limit</p>
+                        <pre>${JSON.stringify(data, null, 2)}</pre>
+                    `;
+                });
+        }
+        
+        function testNoParams() {
+            const url = 'https://jsonplaceholder.typicode.com/posts/1';
+            fetch(url)
+                .then(response => response.json())
+                .then(data => {
+                    responseDiv.innerHTML = `
+                        <h3>No Query Parameters</h3>
+                        <p><strong>URL:</strong> ${url}</p>
+                        <p><strong>Query Params:</strong> None</p>
+                        <pre>${JSON.stringify(data, null, 2)}</pre>
+                    `;
+                });
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Early Network Capture</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            padding: 20px;
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        button {
+            background: #4CAF50;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            margin: 5px;
+            cursor: pointer;
+            border-radius: 4px;
+        }
+        button:hover {
+            background: #45a049;
+        }
+        .section {
+            margin: 20px 0;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        h2 {
+            margin-top: 0;
+        }
+        code {
+            background: #f5f5f5;
+            padding: 2px 5px;
+            border-radius: 3px;
+        }
+        .log {
+            background: #f9f9f9;
+            padding: 10px;
+            margin-top: 10px;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 12px;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+    </style>
+</head>
+<body>
+    <h1>Test Early Network Capture</h1>
+    
+    <div class="section">
+        <h2>Instructions</h2>
+        <ol>
+            <li>Open Chrome DevTools (F12)</li>
+            <li>Make some network requests using the buttons below</li>
+            <li>Then navigate to the Echo tab in DevTools</li>
+            <li>You should see all the requests that were made before opening the Echo tab</li>
+        </ol>
+    </div>
+
+    <div class="section">
+        <h2>Test Requests</h2>
+        <button onclick="makeRequests()">Make 5 Test Requests Before Opening Echo</button>
+        <button onclick="makeJsonRequest()">Make JSON API Request</button>
+        <button onclick="makeImageRequest()">Load Test Image</button>
+        <button onclick="makeFailedRequest()">Make Failed Request (404)</button>
+        <div id="log" class="log"></div>
+    </div>
+
+    <script>
+        function log(message) {
+            const logDiv = document.getElementById('log');
+            const timestamp = new Date().toLocaleTimeString();
+            logDiv.innerHTML += `[${timestamp}] ${message}<br>`;
+            logDiv.scrollTop = logDiv.scrollHeight;
+        }
+
+        async function makeRequests() {
+            log('Starting 5 test requests...');
+            
+            // Make various types of requests
+            const requests = [
+                fetch('https://jsonplaceholder.typicode.com/posts/1'),
+                fetch('https://jsonplaceholder.typicode.com/users'),
+                fetch('https://api.github.com/repos/microsoft/vscode'),
+                fetch('https://httpbin.org/headers'),
+                fetch('https://httpbin.org/status/201')
+            ];
+            
+            for (let i = 0; i < requests.length; i++) {
+                try {
+                    const response = await requests[i];
+                    log(`Request ${i + 1} completed: ${response.status} ${response.statusText}`);
+                } catch (error) {
+                    log(`Request ${i + 1} failed: ${error.message}`);
+                }
+            }
+            
+            log('All requests completed! Now open the Echo tab in DevTools.');
+        }
+
+        async function makeJsonRequest() {
+            log('Making JSON request...');
+            try {
+                const response = await fetch('https://jsonplaceholder.typicode.com/posts', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        title: 'Test Post',
+                        body: 'This is a test post body',
+                        userId: 1
+                    })
+                });
+                const data = await response.json();
+                log(`JSON request completed: ${response.status}, ID: ${data.id}`);
+            } catch (error) {
+                log(`JSON request failed: ${error.message}`);
+            }
+        }
+
+        function makeImageRequest() {
+            log('Loading image...');
+            const img = new Image();
+            img.onload = () => log('Image loaded successfully');
+            img.onerror = () => log('Image failed to load');
+            img.src = 'https://via.placeholder.com/150?text=Echo+Test';
+        }
+
+        async function makeFailedRequest() {
+            log('Making failed request...');
+            try {
+                const response = await fetch('https://httpbin.org/status/404');
+                log(`Failed request completed: ${response.status} ${response.statusText}`);
+            } catch (error) {
+                log(`Request error: ${error.message}`);
+            }
+        }
+    </script>
+</body>
+</html>
