@@ -31,12 +31,12 @@
     
     <div class="test-case">
         <h3>1. URL with UUID (should highlight both)</h3>
-        <div class="test-data">https://api.dev-5-2772-1.24g.lxp.live/training-guide/66b61d8d-ed59-4d2c-87c4-bd2811fdc445</div>
+        <div class="test-data">https://api.dev-5-2772-1.example.com/training-guide/66b61d8d-ed59-4d2c-87c4-bd2811fdc445</div>
     </div>
     
     <div class="test-case">
         <h3>2. Domain without protocol (should highlight)</h3>
-        <div class="test-data">api.dev-5-2772-1.24g.lxp.live</div>
+        <div class="test-data">api.dev-5-2772-1.example.com</div>
     </div>
     
     <div class="test-case">
@@ -56,21 +56,21 @@
     
     <div class="test-case">
         <h3>6. Mixed Content in cURL</h3>
-        <div class="test-data">curl -X GET https://api.dev-5-2772-1.24g.lxp.live/training-guide/66b61d8d-ed59-4d2c-87c4-bd2811fdc445 \
+        <div class="test-data">curl -X GET https://api.dev-5-2772-1.example.com/training-guide/66b61d8d-ed59-4d2c-87c4-bd2811fdc445 \
   -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c" \
-  -H "Host: api.dev-5-2772-1.24g.lxp.live"</div>
+  -H "Host: api.dev-5-2772-1.example.com"</div>
     </div>
     
     <script>
         // Test data object to simulate dashboard data
         const testData = {
             request: {
-                url: "https://api.dev-5-2772-1.24g.lxp.live/training-guide/66b61d8d-ed59-4d2c-87c4-bd2811fdc445",
+                url: "https://api.dev-5-2772-1.example.com/training-guide/66b61d8d-ed59-4d2c-87c4-bd2811fdc445",
                 method: "GET",
                 headers: [
                     { name: "authorization", value: "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c" },
                     { name: "access-control-allow-credentials", value: "true" },
-                    { name: "host", value: "api.dev-5-2772-1.24g.lxp.live" }
+                    { name: "host", value: "api.dev-5-2772-1.example.com" }
                 ]
             },
             response: {
@@ -78,7 +78,7 @@
                 headers: [],
                 body: JSON.stringify({ id: "66b61d8d-ed59-4d2c-87c4-bd2811fdc445", apiKey: "sk_test_4eC39HqLyjWDarjtT1zdp7dc" })
             },
-            curl: 'curl -X GET "https://api.dev-5-2772-1.24g.lxp.live/training-guide/66b61d8d-ed59-4d2c-87c4-bd2811fdc445" -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c"'
+            curl: 'curl -X GET "https://api.dev-5-2772-1.example.com/training-guide/66b61d8d-ed59-4d2c-87c4-bd2811fdc445" -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c"'
         };
         
         // Encode to Base64 and create test URL

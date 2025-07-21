@@ -1,5 +1,11 @@
 // Background service worker for Echo extension
 
+// Configuration
+// IMPORTANT: Update this URL to point to your hosted dashboard for production use
+const DASHBOARD_CONFIG = {
+    EXTERNAL_URL: 'http://localhost:8000/index2.html'  // Change this to your production URL
+};
+
 // Check if chrome APIs are available
 if (typeof chrome === 'undefined' || !chrome.runtime) {
     console.error('Chrome extension APIs not available');
@@ -188,9 +194,8 @@ async function handleOpenDashboard(requestData) {
         const compressed = await compressString(jsonString);
         const base64Data = btoa(String.fromCharCode(...new Uint8Array(compressed)));
         
-        // For production, this would be your hosted dashboard URL
-        // For local testing, the serve-dashboard.sh script will tell you which port to use
-        const dashboardUrl = 'http://localhost:8081/index2.html';
+        // Use the configured dashboard URL from the top of the file
+        const dashboardUrl = DASHBOARD_CONFIG.EXTERNAL_URL;
         
         chrome.tabs.create({
             url: `${dashboardUrl}?data=${base64Data}`
